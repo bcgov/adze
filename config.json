@@ -1,0 +1,48 @@
+{
+    "fields": {
+      "timeStamp": {
+        "name": "lastModified",
+        "xpath": "./xdp:xdp",
+        "transforms": [
+          {
+            "type": "default",
+            "value": "2024-12-20T22:02:55+00:00"
+          }
+        ]
+      },
+      "uuid": {
+        "name": "id",
+        "xpath": "./xdp:xdp",
+        "transforms": [
+          {
+            "type": "default",
+            "value": "2024-12-20T22:02:55+00:00"
+          }
+        ]
+      },
+      "FormTitle": {
+        "xpath": ".//template:subform",
+        "name": "title",
+        "transforms": [
+          {
+            "type": "constant", 
+            "value": "Work Search Activity Record"
+          }
+        ]
+      },
+      "form_id": {
+        "xpath": ".//template:draw[@name='formnumber']//template:text",
+        "transforms": [
+          {
+            "type": "regex_extract",
+            "pattern": "([A-Z0-9]+)\\(",
+            "group": 1
+          }
+        ]
+      }
+    },
+    "constants": {
+      "version": { "value": 8 },
+      "ministry_id": { "value": 2 }
+    }
+  }
