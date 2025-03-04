@@ -1,9 +1,12 @@
 name: Run Tests
 on:
   push:
-    branches: ['*']
+    branches: 
+      - '**'
   pull_request:
-    branches: ['*']
+    branches:
+      - '**'
+    types: [opened, synchronize, reopened]
 jobs:
   test:
     strategy:
