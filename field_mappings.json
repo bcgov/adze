@@ -1,8 +1,4 @@
 {
-    "namespaces": {
-        "xdp": "http://ns.adobe.com/xdp/",
-        "template": "http://www.xfa.org/schema/xfa-template/3.0/"
-    },
     "root_config": {
         "version": 8,
         "ministry_id": 2,

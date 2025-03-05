@@ -8,8 +8,39 @@ from datetime import datetime
 global_id = 0
 
 def get_id():
+    global global_id
     global_id += 1
     return str(global_id)
+
+def extract_namespaces(root):
+    """Extract namespace mappings directly from the XML document"""
+    namespaces = {}
+    
+    # Method 1: Using ElementTree
+    for elem in root.iter():
+        if '}' in elem.tag:
+            uri = elem.tag.split('}')[0].strip('{')
+            # Try to find a prefix from an existing attribute
+            for attr_name in elem.attrib:
+                if '}' in attr_name:
+                    prefix = attr_name.split('}')[1].split(':')[0]
+                    namespaces[prefix] = uri
+                    break
+            else:
+                # If no prefix found in attributes, use a common one based on URI
+                if 'adobe.com/xdp' in uri:
+                    namespaces['xdp'] = uri
+                elif 'xfa-template' in uri:
+                    namespaces['template'] = uri
+    
+    # Return default namespaces if none found
+    if not namespaces:
+        namespaces = {
+            'xdp': 'http://ns.adobe.com/xdp/',
+            'template': 'http://www.xfa.org/schema/xfa-template/3.0/'
+        }
+        
+    return namespaces
 
 def load_mapping_file(mapping_file):
     """Load the external mapping configuration"""
@@ -23,11 +54,12 @@ def load_xml(file_name, mapping_file='field_mappings.json'):
     try:
         # Load the mapping configuration
         mapping = load_mapping_file(mapping_file)
-        namespaces = mapping["namespaces"]
         
         tree = ET.parse(file_name)
         root = tree.getroot()
 
+        namespaces = extract_namespaces(root)
+        
         # Extract the UUID and timestamp from the root tag
         uuid, timestamp = get_root_attributes(root, namespaces)
         
@@ -202,7 +234,7 @@ def generate_form_items(root, namespaces, mapping):
         if field_element is not None:
             items.append({
                 "type": case_field["type"],
-                "id": case_field["id"],
+                "id": get_id(),
                 "label": None,
                 "helpText": None,
                 "styles": None,
@@ -221,7 +253,7 @@ def generate_form_items(root, namespaces, mapping):
     for checkbox in mapping["no_search_checkboxes"]:
         items.append({
             "type": checkbox["type"],
-            "id": checkbox["id"],
+            "id": get_id(),
             "label": None,
             "helpText": None,
             "styles": None,
@@ -232,7 +264,7 @@ def generate_form_items(root, namespaces, mapping):
     # Add reason text area
     items.append({
         "type": mapping["reason_text_area"]["type"],
-        "id": mapping["reason_text_area"]["id"],
+        "id": get_id(),
         "label": None,
         "helpText": None,
         "styles": None,
@@ -251,7 +283,7 @@ def generate_form_items(root, namespaces, mapping):
     # Add additional field
     items.append({
         "type": mapping["additional_field"]["type"],
-        "id": mapping["additional_field"]["id"],
+        "id": get_id(),
         "label": None,
         "helpText": None,
         "styles": None,
@@ -273,7 +305,7 @@ def create_contact_section(root, namespaces, mapping):
     contact_section = {
         "type": mapping["type"],
         "label": mapping["label"],
-        "id": mapping["id"],
+        "id": get_id(),
         "groupId": "11",
         "repeater": mapping["repeater"],
         "codeContext": mapping["code_context"],
@@ -283,7 +315,7 @@ def create_contact_section(root, namespaces, mapping):
     for field in mapping["fields"]:
         field_obj = {
             "type": field["type"],
-            "id": field["id"],
+            "id": get_id(),
             "label": None,
             "helpText": None,
             "styles": None,
@@ -310,7 +342,7 @@ def create_work_search_table(mapping):
     work_search_table = {
         "type": mapping["type"],
         "label": mapping["label"],
-        "id": mapping["id"],
+        "id": get_id(),
         "groupId": "1",
         "repeater": mapping["repeater"],
         "codeContext": mapping["code_context"],
@@ -320,7 +352,7 @@ def create_work_search_table(mapping):
     for field in mapping["fields"]:
         field_obj = {
             "type": field["type"],
-            "id": field["id"],
+            "id": get_id(),
             "label": None,
             "helpText": None,
             "styles": None,
@@ -343,7 +375,7 @@ def create_declaration_section(mapping):
     declaration = {
         "type": mapping["type"],
         "label": mapping["label"],
-        "id": mapping["id"],
+        "id": get_id(),
         "groupId": "1",
         "repeater": mapping["repeater"],
         "codeContext": mapping["code_context"],
@@ -353,7 +385,7 @@ def create_declaration_section(mapping):
     for field in mapping["fields"]:
         field_obj = {
             "type": field["type"],
-            "id": field["id"],
+            "id": get_id(),
             "label": None,
             "helpText": None,
             "styles": None,
@@ -385,7 +417,7 @@ def create_submit_form_section(mapping):
     submit_form = {
         "type": mapping["type"],
         "label": mapping["label"],
-        "id": mapping["id"],
+        "id": get_id(),
         "groupId": "6",
         "repeater": mapping["repeater"],
         "codeContext": mapping["code_context"],
@@ -395,7 +427,7 @@ def create_submit_form_section(mapping):
     for field in mapping["fields"]:
         field_obj = {
             "type": field["type"],
-            "id": field["id"],
+            "id": get_id(),
             "label": None,
             "helpText": None,
             "styles": None,
