@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import time
 import xml.etree.ElementTree as ET
 import re
 import logging
@@ -387,14 +388,17 @@ class XDPToJSONConverter:
         if not os.path.exists(xdp_file):
             logger.error(f"❌ XDP file not found: {xdp_file}")
             return
-        
-        if output_file is None:
-            output_file = os.path.splitext(xdp_file)[0] + '.json'
+
+        output_dir = os.getenv("OUTPUT_DIR", "/app/output")
+        if not output_file:
+            base_name = os.path.splitext(os.path.basename(xdp_file))[0]
+            output_file = os.path.join(output_dir, f"{base_name}.json")
         
         try:
             # Convert the XDP to JSON
             json_data = self.convert_xdp_to_json_custom(xdp_file)
-            
+            os.makedirs(output_dir, exist_ok=True)
+
             # Write the JSON output to file
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=4, ensure_ascii=False)
@@ -431,6 +435,29 @@ class XDPToJSONConverter:
         
         logger.info(f"Processed {files_processed} XDP files")
 
+    def watch_directory(self, input_dir: str):
+        """Watches for new XDP files and triggers process_file() when they appear."""
+
+        processed_files = set()
+        logging.info(f"📂 Watching directory: {input_dir}")
+
+        while True:
+            try:
+                for filename in os.listdir(input_dir):
+                    if filename.endswith(".xdp") and filename not in processed_files:
+                        file_path = os.path.join(input_dir, filename)
+                        logging.info(f"🔄 New file detected: {file_path}")
+
+                        # ✅ Trigger process_file()
+                        self.process_file(file_path)
+                        logging.info(f"✅ Processed file: {file_path}")
+
+                        processed_files.add(filename)
+
+                time.sleep(5)  # ✅ Keeps watching for new files
+            except Exception as e:
+                logging.error(f"❌ Error in watcher: {e}")
+
 
 def main():
     """Command line entry point."""
@@ -447,6 +474,7 @@ def main():
                       help='Directory for output JSON files')
     parser.add_argument('--output', 
                       help='Output file for single file conversion')
+    parser.add_argument('--watch', action='store_true', help='Watch directory for new XDP files')
     parser.add_argument('--verbose', '-v', action='store_true', 
                       help='Enable verbose logging')
     
@@ -460,6 +488,20 @@ def main():
     if not args.mapping:
         logger.error("❌ Mapping file is required")
         return 1
+
+    # Initialize converter
+    try:
+        converter = XDPToJSONConverter(args.mapping)
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize converter: {e}")
+        return 1
+
+    # ✅ Use INPUT_DIR from env variable or fallback to default
+    input_dir = args.input_dir or os.getenv("INPUT_DIR", "/app/input")
+
+    if args.watch:
+        logger.info(f"🔄 Watch mode enabled. Monitoring directory: {input_dir}")
+        converter.watch_directory(input_dir)
     
     if not args.file and not args.input_dir:
         logger.error("❌ Either --file or --input-dir must be specified")
@@ -468,13 +510,6 @@ def main():
     
     if args.input_dir and not args.output_dir:
         logger.error("❌ Output directory is required when processing a directory")
-        return 1
-    
-    # Initialize converter
-    try:
-        converter = XDPToJSONConverter(args.mapping)
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize converter: {e}")
         return 1
     
     # Process files based on arguments
