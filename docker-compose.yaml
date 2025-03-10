@@ -7,9 +7,8 @@ services:
       - ./input:/app/input        # Mounts input directory (for new XDP files)
       - ./reports:/app/reports    # Mounts reports directory (for logs)
       - ./output:/app/output      # Mounts output directory (for converted JSON files)
-    environment:
-      INPUT_DIR: "/app/input"      # Where the watcher looks for new files
-      REPORTS_DIR: "/app/reports"  # Where logs & reports are stored
-      OUTPUT_DIR: "/app/output"    # Where converted JSON files are stored
+      - ./compare:/app/compare
+    env_file:
+      - .env
     command: ["python", "converter.py", "--watch", "--mapping", "/app/field_mappings.json"]
     restart: always
