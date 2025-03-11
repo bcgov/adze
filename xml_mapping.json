@@ -200,7 +200,7 @@
     {
       "xmlPath": "<pageSet>",
       "translationMethod": "",
-      "objectType": "",
+      "objectType": "group",
       "jsonKey": "",
       "jsonValue": ""
     }
