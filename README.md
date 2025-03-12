@@ -27,5 +27,4 @@ Each conversion generates a **JSON report** with the following format:
 }
 
 ## 📄 Additional Documentation
-For a detailed explanation of reports and error handling, refer to the full documentation:  
-[Reports and Error Handling Guide](https://drive.google.com/file/d/1sItOoXIiZpSOP4BZ4r5TiWC4zw9KYviW/view?usp=drive_link)
+For a detailed explanation of reports and error handling, refer to the full documentation.
