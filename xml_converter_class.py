@@ -344,7 +344,7 @@ class XDPParser:
         
         elif ui_tag == "numericEdit":
             field_obj = {
-                "type": "number-input",
+                "type": "text-input",
                 "id": self.next_id(),
                 "label": caption_text,
                 "helpText": help_text,

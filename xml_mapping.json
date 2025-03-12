@@ -12,7 +12,7 @@
       "translationMethod": "Tag Exists",
       "objectType": "field",
       "jsonKey": "type",
-      "jsonValue": "number-input"
+      "jsonValue": "text-input"
     },
     {
       "xmlPath": "<field><ui><button>",
