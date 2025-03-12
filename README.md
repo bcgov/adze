@@ -1,3 +1,20 @@
+## 🚀 Running the XML Converter
+
+To run the converter script, follow these steps:
+
+1. **Run the converter script**:
+    ```sh
+    python xml_converter.py -f=<path to input xml> -m=<path to mapping file>
+    ```
+
+2. **Check the generated json**:
+    - The generated JSON will be saved in the same directory with the name `mapping_output.json`.
+
+3. **Check the generated report**:
+    - The report will be saved in the same directory with the name `conversion_report.json`.
+
+---
+
 # XML to JSON Converter - Reports & Error Handling
 
 ## 📖 Overview
