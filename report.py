@@ -5,9 +5,11 @@ import datetime
 class Report:
     def __init__(self, xml_filename):
         """Initialize report with a timestamped filename for every new run."""
+        os.makedirs("Report", exist_ok=True)
         safe_filename = os.path.splitext(os.path.basename(xml_filename))[0]  # Remove directory path & extension
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current date-time (YYYYMMDD_HHMMSS)
         self.report_file = f"{safe_filename}_report_{timestamp}.json"  # Create unique filename
+        self.output_file = os.path.join("report", self.report_file)
         self.data = {"success": [], "errors": [], "manual_intervention_needed": []}
 
     def _write_report(self):
