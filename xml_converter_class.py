@@ -184,12 +184,12 @@ class XDPParser:
             # Add items to output JSON
             self.output_json["data"] = {"items": self.all_items}
             
-            # Write output
-            output_file = 'mapping_output.json'
-            with open(output_file, 'w') as json_file:
-                json.dump(self.output_json, json_file, indent=4)
+            # # Write output
+            # output_file = 'mapping_output.json'
+            # with open(output_file, 'w') as json_file:
+            #     json.dump(self.output_json, json_file, indent=4)
                 
-            print(f"JSON output saved to {output_file}")
+            # print(f"JSON output saved to {output_file}")
             return self.output_json
         except Exception as e:
             print(f"Error in main parse method: {e}")
