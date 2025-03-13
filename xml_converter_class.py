@@ -523,10 +523,13 @@ class XDPParser:
                         "name": button_type
                     }
                 }
-            
+            self.Report.report_success(field_obj["type"], 'text-info', field_obj["label"])
             return field_obj
         except Exception as e:
             print(f"Error processing field element: {e}")
+            self.Report.report_error(field_name if 'field_name' in locals() else "unknown_field", 
+                                    'text-info', 
+                                    "Error processing field element")
             return None
     
     def process_subform(self, subform):
@@ -584,6 +587,7 @@ class XDPParser:
             # If we found fields, add them to the group
             if fields:
                 subform_group["groupItems"][0]["fields"] = fields
+                self.Report.report_success(subform_name, 'group', "Subform")
                 return subform_group
             
             # If no direct fields but has nested groups, create a container group
@@ -651,9 +655,13 @@ class XDPParser:
             # If we found fields, add them to the group
             if fields:
                 group_obj["groupItems"][0]["fields"] = fields
+                self.Report.report_success(group_name, 'group', "Exclusion Group")
                 return group_obj
             
             return None
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
+            self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
+                                    'group', 
+                                    "Error processing exclusion group")
             return None
