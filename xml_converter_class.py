@@ -7,25 +7,29 @@ from report import Report
 
 class XDPParser:
     def __init__(self, file_path, mapping_file='xml_mapping.json'):
-        self.file_path = file_path
-        self.mapping_file = mapping_file
-        self.breadcrumb = ""
-        self.id_counter = 1
-        self.mapping = self.load_mapping_file()
-        self.namespaces = None
-        
-        # Parse the XML file
-        self.tree = ET.parse(file_path)
-        self.root = self.tree.getroot()
-        self.namespaces = self.extract_namespaces()
-        
-        # Find the root subform
-        self.root_subform = self.root.find(".//template:subform", self.namespaces)
-        
-        # Output JSON structure
-        self.output_json = self.create_output_structure()
-        self.all_items = []
-        self.Report = Report(file_path)
+        try:
+            self.file_path = file_path
+            self.mapping_file = mapping_file
+            self.breadcrumb = ""
+            self.id_counter = 1
+            self.mapping = self.load_mapping_file()
+            self.namespaces = None
+            
+            # Parse the XML file
+            self.tree = ET.parse(file_path)
+            self.root = self.tree.getroot()
+            self.namespaces = self.extract_namespaces()
+            
+            # Find the root subform
+            self.root_subform = self.root.find(".//template:subform", self.namespaces)
+            
+            # Output JSON structure
+            self.output_json = self.create_output_structure()
+            self.all_items = []
+            self.Report = Report(file_path)
+        except Exception as e:
+            print(f"Error initializing XDPParser: {e}")
+            raise
     
     def load_mapping_file(self):
         try:
@@ -40,7 +44,7 @@ class XDPParser:
             return None
     
     def extract_namespaces(self):
-        try :
+        try:
             """Extract namespace mappings from XML document"""
             namespaces = {}
             
@@ -94,14 +98,22 @@ class XDPParser:
             print(f"Error removing breadcrumb: {e}")
     
     def get_breadcrumb(self):
-        """Get current breadcrumb path"""
-        return self.breadcrumb
+        try:
+            """Get current breadcrumb path"""
+            return self.breadcrumb
+        except Exception as e:
+            print(f"Error getting breadcrumb: {e}")
+            return ""
     
     def next_id(self):
-        """Get next unique ID and increment counter"""
-        current_id = str(self.id_counter)
-        self.id_counter += 1
-        return current_id
+        try:
+            """Get next unique ID and increment counter"""
+            current_id = str(self.id_counter)
+            self.id_counter += 1
+            return current_id
+        except Exception as e:
+            print(f"Error generating next ID: {e}")
+            return str(uuid.uuid4())
     
     def find_mapping_for_path(self, path):
         try:
@@ -147,58 +159,74 @@ class XDPParser:
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
-            return None
+            return {
+                "version": "1.0",
+                "ministry_id": "0",
+                "id": str(uuid.uuid4()),
+                "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "title": "Form",
+                "form_id": "FORM0001",
+                "deployed_to": None,
+                "dataSources": []
+            }
     
     def parse(self):
-        """Main parsing method"""
-        if not self.root_subform:
-            print("Root subform not found")
+        try:
+            """Main parsing method"""
+            if not self.root_subform:
+                print("Root subform not found")
+                return None
+                
+            # Process all sections
+            self.process_master_pages()
+            self.process_root_elements()
+            
+            # Add items to output JSON
+            self.output_json["data"] = {"items": self.all_items}
+            
+            # Write output
+            output_file = 'mapping_output.json'
+            with open(output_file, 'w') as json_file:
+                json.dump(self.output_json, json_file, indent=4)
+                
+            print(f"JSON output saved to {output_file}")
+            return self.output_json
+        except Exception as e:
+            print(f"Error in main parse method: {e}")
             return None
-            
-        # Process all sections
-        self.process_master_pages()
-        self.process_root_elements()
-        
-        # Add items to output JSON
-        self.output_json["data"] = {"items": self.all_items}
-        
-        # Write output
-        output_file = 'mapping_output.json'
-        with open(output_file, 'w') as json_file:
-            json.dump(self.output_json, json_file, indent=4)
-            
-        print(f"JSON output saved to {output_file}")
-        return self.output_json
     
     def process_master_pages(self):
-        """Process pageSet elements (master pages)"""
-        pagesets = self.root.findall(".//template:pageSet", self.namespaces)
-        
-        for pageset in pagesets:
+        try:
+            """Process pageSet elements (master pages)"""
+            pagesets = self.root.findall(".//template:pageSet", self.namespaces)
             
-            page_fields = self.process_page_fields(pageset)
-            # Add master page group if we found any fields
-            if page_fields:
-                master_page = {
-                    "type": "group",
-                    "label": "Master Page",
-                    "id": self.next_id(),
-                    "groupId": str(self.mapping["constants"]["ministry_id"]),
-                    "repeater": False,
-                    "codeContext": {
-                        "name": "master_page"
-                    },
-                    "groupItems": [
-                        {
-                            "fields": page_fields
-                        }
-                    ]
-                }
-                self.all_items.append(master_page)
+            for pageset in pagesets:
+                
+                page_fields = self.process_page_fields(pageset)
+                # Add master page group if we found any fields
+                if page_fields:
+                    master_page = {
+                        "type": "group",
+                        "label": "Master Page",
+                        "id": self.next_id(),
+                        "groupId": str(self.mapping["constants"]["ministry_id"]),
+                        "repeater": False,
+                        "codeContext": {
+                            "name": "master_page"
+                        },
+                        "groupItems": [
+                            {
+                                "fields": page_fields
+                            }
+                        ]
+                    }
+                    self.all_items.append(master_page)
+        except Exception as e:
+            print(f"Error processing master pages: {e}")
     
     def process_page_fields(self, pageset):
-        page_fields = []
         try:
+            page_fields = []
             # Find text elements in pageSet for header/footer info
             for draw in pageset.findall(".//template:draw", self.namespaces):
                 draw_name = draw.attrib.get("name", "generic_text_display")
@@ -228,8 +256,8 @@ class XDPParser:
             return page_fields
         except Exception as e:
             print(f"Error processing page fields: {e}")
-            self.Report.report_error(draw_name, 'text-info', text_value)
-            return page_fields
+            self.Report.report_error("page_field", 'text-info', "Error processing page fields")
+            return []
     
     def process_root_elements(self):
         try:
@@ -309,309 +337,323 @@ class XDPParser:
             return field_obj
         except Exception as e:
             print(f"Error processing draw element: {e}")
-            self.Report.report_error(draw_name, 'text-info', text_value)
+            self.Report.report_error(draw_name if 'draw_name' in locals() else "unknown_draw", 
+                                    'text-info', 
+                                    text_value if 'text_value' in locals() else "unknown_text")
             return None
     
     def process_field(self, field):
-        """Process a field element"""
-        field_name = field.attrib.get("name", f"field_{self.id_counter}")
-        
-        # Get UI element to determine field type
-        ui_elem = field.find("./template:ui", self.namespaces)
-        if ui_elem is None:
-            return None
-        
-        # Determine field type based on UI element
-        ui_children = list(ui_elem)
-        if not ui_children:
-            return None
-        
-        ui_child = ui_children[0]
-        ui_tag = ui_child.tag.split('}')[-1] if '}' in ui_child.tag else ui_child.tag
-        
-        # Get caption/label if available
-        caption_text = None
-        caption_elem = field.find("./template:caption/template:value/template:text", self.namespaces)
-        if caption_elem is not None and caption_elem.text:
-            caption_text = caption_elem.text
-        
-        # Get help text if available
-        help_text = None
-        help_elem = field.find("./template:assist/template:toolTip", self.namespaces)
-        if help_elem is not None and help_elem.text:
-            help_text = help_elem.text
-        
-        # Get binding reference if available
-        binding_ref = None
-        binding_elem = field.find("./template:bind", self.namespaces)
-        if binding_elem is not None and 'ref' in binding_elem.attrib:
-            binding_ref = binding_elem.attrib['ref']
-        
-        # Create appropriate field object based on UI type
-        field_obj = None
-        
-        if ui_tag == "textEdit":
-            field_obj = {
-                "type": "text-input",
-                "id": self.next_id(),
-                "label": caption_text,
-                "helpText": help_text,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": "Enter your ",
-                "helperText": " as it appears on official documents",
-                "inputType": "text"
-            }
+        try:
+            """Process a field element"""
+            field_name = field.attrib.get("name", f"field_{self.id_counter}")
             
-            # Check for special field types based on field name
-            if "area" in field_name.lower() or any(area in field_name.lower() for area in ["comment", "description", "notes"]):
-                field_obj["type"] = "text-area"
+            # Get UI element to determine field type
+            ui_elem = field.find("./template:ui", self.namespaces)
+            if ui_elem is None:
+                return None
             
-            # Add databinding if available
-            if binding_ref:
-                source = None
-                if "Contact" in binding_ref:
-                    source = "Contact"
-                elif "Service" in binding_ref:
-                    source = "Service Request"
-                    
-                if source:
-                    field_obj["databindings"] = {
-                        "source": source,
-                        "path": binding_ref
-                    }
-                else:
-                    field_obj["databindings"] = {
-                        "path": binding_ref
-                    }
-        
-        elif ui_tag == "numericEdit":
-            field_obj = {
-                "type": "text-input",
-                "id": self.next_id(),
-                "label": caption_text,
-                "helpText": help_text,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "value": None
-            }
+            # Determine field type based on UI element
+            ui_children = list(ui_elem)
+            if not ui_children:
+                return None
             
-            if binding_ref:
-                field_obj["databindings"] = {"path": binding_ref}
-        
-        elif ui_tag == "dateTimeEdit":
-            field_obj = {
-                "type": "date",
-                "id": self.next_id(),
-                "label": caption_text,
-                "helpText": help_text,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
+            ui_child = ui_children[0]
+            ui_tag = ui_child.tag.split('}')[-1] if '}' in ui_child.tag else ui_child.tag
+            
+            # Get caption/label if available
+            caption_text = None
+            caption_elem = field.find("./template:caption/template:value/template:text", self.namespaces)
+            if caption_elem is not None and caption_elem.text:
+                caption_text = caption_elem.text
+            
+            # Get help text if available
+            help_text = None
+            help_elem = field.find("./template:assist/template:toolTip", self.namespaces)
+            if help_elem is not None and help_elem.text:
+                help_text = help_elem.text
+            
+            # Get binding reference if available
+            binding_ref = None
+            binding_elem = field.find("./template:bind", self.namespaces)
+            if binding_elem is not None and 'ref' in binding_elem.attrib:
+                binding_ref = binding_elem.attrib['ref']
+            
+            # Create appropriate field object based on UI type
+            field_obj = None
+            
+            if ui_tag == "textEdit":
+                field_obj = {
+                    "type": "text-input",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "placeholder": "Enter your ",
+                    "helperText": " as it appears on official documents",
+                    "inputType": "text"
                 }
-            }
-            
-            if binding_ref:
-                field_obj["databindings"] = {"path": binding_ref}
-        
-        elif ui_tag == "checkButton":
-            # Check if it's a radio button (round shape) or checkbox
-            shape = ui_child.attrib.get("shape", "")
-            if shape == "round":
-                field_type = "radio"
-            else:
-                field_type = "checkbox"
                 
-            field_obj = {
-                "type": field_type,
-                "id": self.next_id(),
-                "label": caption_text,
-                "helpText": help_text,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "value": False
-            }
+                # Check for special field types based on field name
+                if "area" in field_name.lower() or any(area in field_name.lower() for area in ["comment", "description", "notes"]):
+                    field_obj["type"] = "text-area"
+                
+                # Add databinding if available
+                if binding_ref:
+                    source = None
+                    if "Contact" in binding_ref:
+                        source = "Contact"
+                    elif "Service" in binding_ref:
+                        source = "Service Request"
+                        
+                    if source:
+                        field_obj["databindings"] = {
+                            "source": source,
+                            "path": binding_ref
+                        }
+                    else:
+                        field_obj["databindings"] = {
+                            "path": binding_ref
+                        }
             
-            if binding_ref:
-                field_obj["databindings"] = {"path": binding_ref}
-            
-            # Add groupName for radio buttons
-            if field_type == "radio":
-                field_obj["groupName"] = field_name
-        
-        elif ui_tag == "choiceList":
-            field_obj = {
-                "type": "dropdown",
-                "id": self.next_id(),
-                "label": caption_text,
-                "helpText": help_text,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "value": None,
-                "listItems": []
-            }
-            
-            # Process list items
-            items_elem = field.find("./template:items", self.namespaces)
-            if items_elem is not None:
-                list_items = []
-                for item in items_elem.findall("./template:text", self.namespaces):
-                    if item.text:
-                        list_items.append({
-                            "label": item.text,
-                            "value": item.text
-                        })
-                field_obj["listItems"] = list_items
-            
-            if binding_ref:
-                field_obj["databindings"] = {"path": binding_ref}
-        
-        elif ui_tag == "button":
-            # Determine button type based on name
-            button_type = "generic_button"
-            if "submit" in field_name.lower():
-                button_type = "submit"
-            elif "cancel" in field_name.lower():
-                button_type = "cancel"
-            
-            field_obj = {
-                "type": "button",
-                "id": self.next_id(),
-                "label": caption_text,
-                "styles": None,
-                "codeContext": {
-                    "name": button_type
+            elif ui_tag == "numericEdit":
+                field_obj = {
+                    "type": "text-input",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "value": None
                 }
-            }
-        
-        return field_obj
+                
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+            
+            elif ui_tag == "dateTimeEdit":
+                field_obj = {
+                    "type": "date",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    }
+                }
+                
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+            
+            elif ui_tag == "checkButton":
+                # Check if it's a radio button (round shape) or checkbox
+                shape = ui_child.attrib.get("shape", "")
+                if shape == "round":
+                    field_type = "radio"
+                else:
+                    field_type = "checkbox"
+                    
+                field_obj = {
+                    "type": field_type,
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "value": False
+                }
+                
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+                
+                # Add groupName for radio buttons
+                if field_type == "radio":
+                    field_obj["groupName"] = field_name
+            
+            elif ui_tag == "choiceList":
+                field_obj = {
+                    "type": "dropdown",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "value": None,
+                    "listItems": []
+                }
+                
+                # Process list items
+                items_elem = field.find("./template:items", self.namespaces)
+                if items_elem is not None:
+                    list_items = []
+                    for item in items_elem.findall("./template:text", self.namespaces):
+                        if item.text:
+                            list_items.append({
+                                "label": item.text,
+                                "value": item.text
+                            })
+                    field_obj["listItems"] = list_items
+                
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+            
+            elif ui_tag == "button":
+                # Determine button type based on name
+                button_type = "generic_button"
+                if "submit" in field_name.lower():
+                    button_type = "submit"
+                elif "cancel" in field_name.lower():
+                    button_type = "cancel"
+                
+                field_obj = {
+                    "type": "button",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": button_type
+                    }
+                }
+            
+            return field_obj
+        except Exception as e:
+            print(f"Error processing field element: {e}")
+            return None
     
     def process_subform(self, subform):
-        """Process a subform element (becomes a group)"""
-        subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
-        
-        # Check if this is a repeating subform
-        has_occur = subform.find("./template:occur", self.namespaces) is not None
-        
-        # Determine group ID based on name
-        group_id = "1"  # Default
-        if "contact" in subform_name.lower():
-            group_id = "11"
-        elif "submit" in subform_name.lower():
-            group_id = "6"
-        
-        # Group label - capitalize words and add spaces
-        label = " ".join(word.capitalize() for word in subform_name.split("_"))
-        if has_occur:
-            label = f"Table - {label}"
-        
-        # Create group for this subform
-        subform_group = {
-            "type": "group",
-            "label": label,
-            "id": self.next_id(),
-            "groupId": group_id,
-            "repeater": has_occur,
-            "codeContext": {
-                "name": subform_name
-            },
-            "groupItems": [
-                {
-                    "fields": []
-                }
-            ]
-        }
-        
-        # Process fields in this subform
-        fields = []
-        
-        # Process field elements
-        for field in subform.findall("./template:field", self.namespaces):
-            field_obj = self.process_field(field)
-            if field_obj:
-                fields.append(field_obj)
-        
-        # Process draw elements (text display)
-        for draw in subform.findall("./template:draw", self.namespaces):
-            draw_obj = self.process_draw(draw)
-            if draw_obj:
-                fields.append(draw_obj)
-        
-        # If we found fields, add them to the group
-        if fields:
-            subform_group["groupItems"][0]["fields"] = fields
-            return subform_group
-        
-        # If no direct fields but has nested groups, create a container group
-        nested_groups = []
-        
-        # Process nested subforms
-        for nested_subform in subform.findall("./template:subform", self.namespaces):
-            nested_group = self.process_subform(nested_subform)
-            if nested_group:
-                nested_groups.append(nested_group)
-        
-        # Process exclGroups
-        for exclgroup in subform.findall("./template:exclGroup", self.namespaces):
-            excl_group = self.process_exclgroup(exclgroup)
-            if excl_group:
-                nested_groups.append(excl_group)
-        
-        # If we have nested groups but no direct fields, create a container group
-        if nested_groups:
-            # Create a container group to hold the nested groups
-            for group in nested_groups:
-                self.all_items.append(group)
+        try:
+            """Process a subform element (becomes a group)"""
+            subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
             
-            # Return None since we directly added the nested groups to all_items
+            # Check if this is a repeating subform
+            has_occur = subform.find("./template:occur", self.namespaces) is not None
+            
+            # Determine group ID based on name
+            group_id = "1"  # Default
+            if "contact" in subform_name.lower():
+                group_id = "11"
+            elif "submit" in subform_name.lower():
+                group_id = "6"
+            
+            # Group label - capitalize words and add spaces
+            label = " ".join(word.capitalize() for word in subform_name.split("_"))
+            if has_occur:
+                label = f"Table - {label}"
+            
+            # Create group for this subform
+            subform_group = {
+                "type": "group",
+                "label": label,
+                "id": self.next_id(),
+                "groupId": group_id,
+                "repeater": has_occur,
+                "codeContext": {
+                    "name": subform_name
+                },
+                "groupItems": [
+                    {
+                        "fields": []
+                    }
+                ]
+            }
+            
+            # Process fields in this subform
+            fields = []
+            
+            # Process field elements
+            for field in subform.findall("./template:field", self.namespaces):
+                field_obj = self.process_field(field)
+                if field_obj:
+                    fields.append(field_obj)
+            
+            # Process draw elements (text display)
+            for draw in subform.findall("./template:draw", self.namespaces):
+                draw_obj = self.process_draw(draw)
+                if draw_obj:
+                    fields.append(draw_obj)
+            
+            # If we found fields, add them to the group
+            if fields:
+                subform_group["groupItems"][0]["fields"] = fields
+                return subform_group
+            
+            # If no direct fields but has nested groups, create a container group
+            nested_groups = []
+            
+            # Process nested subforms
+            for nested_subform in subform.findall("./template:subform", self.namespaces):
+                nested_group = self.process_subform(nested_subform)
+                if nested_group:
+                    nested_groups.append(nested_group)
+            
+            # Process exclGroups
+            for exclgroup in subform.findall("./template:exclGroup", self.namespaces):
+                excl_group = self.process_exclgroup(exclgroup)
+                if excl_group:
+                    nested_groups.append(excl_group)
+            
+            # If we have nested groups but no direct fields, create a container group
+            if nested_groups:
+                # Create a container group to hold the nested groups
+                for group in nested_groups:
+                    self.all_items.append(group)
+                
+                # Return None since we directly added the nested groups to all_items
+                return None
+            
+            # No direct fields and no nested groups - return None
             return None
-        
-        # No direct fields and no nested groups - return None
-        return None
+        except Exception as e:
+            print(f"Error processing subform: {e}")
+            return None
     
     def process_exclgroup(self, exclgroup):
-        """Process an exclusion group (radio button group)"""
-        group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
-        
-        # Create group for this exclusion group
-        group_obj = {
-            "type": "group",
-            "label": group_name,
-            "id": self.next_id(),
-            "groupId": "1",
-            "repeater": False,
-            "codeContext": {
-                "name": group_name
-            },
-            "groupItems": [
-                {
-                    "fields": []
-                }
-            ]
-        }
-        
-        # Process fields (usually radio buttons) in this group
-        fields = []
-        for field in exclgroup.findall("./template:field", self.namespaces):
-            radio_obj = self.process_field(field)
-            if radio_obj:
-                # Make sure it's a radio button and set the group name
-                if radio_obj["type"] == "radio":
-                    radio_obj["groupName"] = group_name
-                fields.append(radio_obj)
-        
-        # If we found fields, add them to the group
-        if fields:
-            group_obj["groupItems"][0]["fields"] = fields
-            return group_obj
-        
-        return None
+        try:
+            """Process an exclusion group (radio button group)"""
+            group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
+            
+            # Create group for this exclusion group
+            group_obj = {
+                "type": "group",
+                "label": group_name,
+                "id": self.next_id(),
+                "groupId": "1",
+                "repeater": False,
+                "codeContext": {
+                    "name": group_name
+                },
+                "groupItems": [
+                    {
+                        "fields": []
+                    }
+                ]
+            }
+            
+            # Process fields (usually radio buttons) in this group
+            fields = []
+            for field in exclgroup.findall("./template:field", self.namespaces):
+                radio_obj = self.process_field(field)
+                if radio_obj:
+                    # Make sure it's a radio button and set the group name
+                    if radio_obj["type"] == "radio":
+                        radio_obj["groupName"] = group_name
+                    fields.append(radio_obj)
+            
+            # If we found fields, add them to the group
+            if fields:
+                group_obj["groupItems"][0]["fields"] = fields
+                return group_obj
+            
+            return None
+        except Exception as e:
+            print(f"Error processing exclusion group: {e}")
+            return None
