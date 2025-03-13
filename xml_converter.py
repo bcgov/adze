@@ -8,7 +8,6 @@ def parse_xdp_to_json(file_path, mapping_file='xml_mapping.json'):
         return parser.parse()
     except Exception as e:
         print(f"Error processing XDP: {e}")
-        import traceback
 
 
 if __name__ == "__main__":

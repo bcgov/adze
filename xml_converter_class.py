@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
+from report import Report
 
 class XDPParser:
     def __init__(self, file_path, mapping_file='xml_mapping.json'):
@@ -24,54 +25,73 @@ class XDPParser:
         # Output JSON structure
         self.output_json = self.create_output_structure()
         self.all_items = []
+        self.Report = Report(file_path)
     
     def load_mapping_file(self):
-        """Load field mapping configuration"""
-        if not os.path.exists(self.mapping_file):
-            raise FileNotFoundError(f"Mapping file {self.mapping_file} not found")
-        
-        with open(self.mapping_file, 'r') as f:
-            return json.load(f)
+        try:
+            """Load field mapping configuration"""
+            if not os.path.exists(self.mapping_file):
+                raise FileNotFoundError(f"Mapping file {self.mapping_file} not found")
+            
+            with open(self.mapping_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading mapping file: {e}")
+            return None
     
     def extract_namespaces(self):
-        """Extract namespace mappings from XML document"""
-        namespaces = {}
-        
-        for elem in self.root.iter():
-            if '}' in elem.tag:
-                uri = elem.tag.split('}')[0].strip('{')
-                for attr_name in elem.attrib:
-                    if '}' in attr_name:
-                        prefix = attr_name.split('}')[1].split(':')[0]
-                        namespaces[prefix] = uri
-                        break
-                else:
-                    if 'adobe.com/xdp' in uri:
-                        namespaces['xdp'] = uri
-                    elif 'xfa-template' in uri:
-                        namespaces['template'] = uri
-        
-        # Return default namespaces if none found
-        if not namespaces:
+        try :
+            """Extract namespace mappings from XML document"""
+            namespaces = {}
+            
+            for elem in self.root.iter():
+                if '}' in elem.tag:
+                    uri = elem.tag.split('}')[0].strip('{')
+                    for attr_name in elem.attrib:
+                        if '}' in attr_name:
+                            prefix = attr_name.split('}')[1].split(':')[0]
+                            namespaces[prefix] = uri
+                            break
+                    else:
+                        if 'adobe.com/xdp' in uri:
+                            namespaces['xdp'] = uri
+                        elif 'xfa-template' in uri:
+                            namespaces['template'] = uri
+            
+            # Return default namespaces if none found
+            if not namespaces:
+                namespaces = {
+                    'xdp': 'http://ns.adobe.com/xdp/',
+                    'template': 'http://www.xfa.org/schema/xfa-template/3.0/'
+                }
+                
+            return namespaces
+        except Exception as e:
+            print(f"Error extracting namespaces Using default Namespaces: {e}")
             namespaces = {
                 'xdp': 'http://ns.adobe.com/xdp/',
                 'template': 'http://www.xfa.org/schema/xfa-template/3.0/'
             }
-            
-        return namespaces
+            return namespaces
     
     def add_breadcrumb(self, tag):
-        """Add element tag to breadcrumb path"""
-        self.breadcrumb += f"<{tag}>"
-        if len(self.breadcrumb) > 200:
-            self.breadcrumb = self.breadcrumb[-200:]
+        try:
+            """Add element tag to breadcrumb path"""
+            self.breadcrumb += f"<{tag}>"
+            if len(self.breadcrumb) > 200:
+                self.breadcrumb = self.breadcrumb[-200:]
+        except Exception as e:
+            print(f"Error adding breadcrumb: {e}")
     
     def remove_breadcrumb(self, tag):
-        """Remove the last element tag from breadcrumb"""
-        tag_str = f"<{tag}>"
-        index = self.breadcrumb.rfind(tag_str)
-        if index != -1:
-            self.breadcrumb = self.breadcrumb[:index]
+        try:
+            """Remove the last element tag from breadcrumb"""
+            tag_str = f"<{tag}>"
+            index = self.breadcrumb.rfind(tag_str)
+            if index != -1:
+                self.breadcrumb = self.breadcrumb[:index]
+        except Exception as e:
+            print(f"Error removing breadcrumb: {e}")
     
     def get_breadcrumb(self):
         """Get current breadcrumb path"""
@@ -84,42 +104,50 @@ class XDPParser:
         return current_id
     
     def find_mapping_for_path(self, path):
-        """Find mapping configuration for given path"""
-        for mapping in self.mapping.get("mappings", []):
-            if path.endswith(mapping.get("xmlPath", "")):
-                return mapping
-        return None
+        try:
+            """Find mapping configuration for given path"""
+            for mapping in self.mapping.get("mappings", []):
+                if path.endswith(mapping.get("xmlPath", "")):
+                    return mapping
+            return None
+        except Exception as e:
+            print(f"Error finding mapping for path: {e}")
+            return None
     
     def create_output_structure(self):
-        """Create the base output JSON structure"""
-        # Extract form ID from filename or default
-        form_id = "HR0077"  # Default form ID
-        if "HR" in self.file_path:
-            parts = self.file_path.split("HR")
-            if len(parts) > 1:
-                form_id_part = parts[1].split(".")[0]
-                if form_id_part:
-                    form_id = f"HR{form_id_part}"
-        
-        # Get form title if available
-        form_title = "Work Search Activity Record"  # Default title
-        
-        # Find title text manually since contains() is not supported in ElementTree XPath
-        for text_elem in self.root.findall(".//template:text", self.namespaces):
-            if text_elem.text and "Work Search" in text_elem.text:
-                form_title = text_elem.text
-                break
-        
-        return {
-            "version": self.mapping["constants"]["version"],
-            "ministry_id": self.mapping["constants"]["ministry_id"],
-            "id": str(uuid.uuid4()),
-            "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-            "title": form_title,
-            "form_id": form_id,
-            "deployed_to": None,
-            "dataSources": []
-        }
+        try:
+            """Create the base output JSON structure"""
+            # Extract form ID from filename or default
+            form_id = "HR0001"  # Default form ID
+            if "HR" in self.file_path:
+                parts = self.file_path.split("HR")
+                if len(parts) > 1:
+                    form_id_part = parts[1].split(".")[0]
+                    if form_id_part:
+                        form_id = f"HR{form_id_part}"
+            
+            # Get form title if available
+            form_title = "Work Search Activity Record"  # Default title
+            
+            # Find title text manually since contains() is not supported in ElementTree XPath
+            for text_elem in self.root.findall(".//template:text", self.namespaces):
+                if text_elem.text and "Work Search" in text_elem.text:
+                    form_title = text_elem.text
+                    break
+            
+            return {
+                "version": self.mapping["constants"]["version"],
+                "ministry_id": self.mapping["constants"]["ministry_id"],
+                "id": str(uuid.uuid4()),
+                "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "title": form_title,
+                "form_id": form_id,
+                "deployed_to": None,
+                "dataSources": []
+            }
+        except Exception as e:
+            print(f"Error creating output structure: {e}")
+            return None
     
     def parse(self):
         """Main parsing method"""
@@ -147,8 +175,30 @@ class XDPParser:
         pagesets = self.root.findall(".//template:pageSet", self.namespaces)
         
         for pageset in pagesets:
-            page_fields = []
             
+            page_fields = self.process_page_fields(pageset)
+            # Add master page group if we found any fields
+            if page_fields:
+                master_page = {
+                    "type": "group",
+                    "label": "Master Page",
+                    "id": self.next_id(),
+                    "groupId": str(self.mapping["constants"]["ministry_id"]),
+                    "repeater": False,
+                    "codeContext": {
+                        "name": "master_page"
+                    },
+                    "groupItems": [
+                        {
+                            "fields": page_fields
+                        }
+                    ]
+                }
+                self.all_items.append(master_page)
+    
+    def process_page_fields(self, pageset):
+        page_fields = []
+        try:
             # Find text elements in pageSet for header/footer info
             for draw in pageset.findall(".//template:draw", self.namespaces):
                 draw_name = draw.attrib.get("name", "generic_text_display")
@@ -174,97 +224,93 @@ class XDPParser:
                     "helperText": " as it appears on official documents"
                 }
                 page_fields.append(text_field)
-            
-            # Add master page group if we found any fields
-            if page_fields:
-                master_page = {
-                    "type": "group",
-                    "label": "Master Page",
-                    "id": self.next_id(),
-                    "groupId": str(self.mapping["constants"]["ministry_id"]),
-                    "repeater": False,
-                    "codeContext": {
-                        "name": "master_page"
-                    },
-                    "groupItems": [
-                        {
-                            "fields": page_fields
-                        }
-                    ]
-                }
-                self.all_items.append(master_page)
+                self.Report.report_success(draw_name, 'text-info', text_value)
+            return page_fields
+        except Exception as e:
+            print(f"Error processing page fields: {e}")
+            self.Report.report_error(draw_name, 'text-info', text_value)
+            return page_fields
     
     def process_root_elements(self):
-        """Process top-level elements in the main subform"""
-        # First, check for any direct field or draw elements
-        for draw in self.root_subform.findall("./template:draw", self.namespaces):
-            field = self.process_draw(draw)
-            if field:
-                self.all_items.append(field)
-        
-        for field in self.root_subform.findall("./template:field", self.namespaces):
-            field_obj = self.process_field(field)
-            if field_obj:
-                self.all_items.append(field_obj)
-        
-        # Then process subforms (which become groups)
-        for subform in self.root_subform.findall("./template:subform", self.namespaces):
-            group = self.process_subform(subform)
-            if group:
-                self.all_items.append(group)
-        
-        # Process exclusion groups (radio button groups)
-        for exclgroup in self.root_subform.findall("./template:exclGroup", self.namespaces):
-            group = self.process_exclgroup(exclgroup)
-            if group:
-                self.all_items.append(group)
+        try:
+            """Process top-level elements in the main subform"""
+            # First, check for any direct field or draw elements
+            for draw in self.root_subform.findall("./template:draw", self.namespaces):
+                field = self.process_draw(draw)
+                if field:
+                    self.all_items.append(field)
+            
+            for field in self.root_subform.findall("./template:field", self.namespaces):
+                field_obj = self.process_field(field)
+                if field_obj:
+                    self.all_items.append(field_obj)
+            
+            # Then process subforms (which become groups)
+            for subform in self.root_subform.findall("./template:subform", self.namespaces):
+                group = self.process_subform(subform)
+                if group:
+                    self.all_items.append(group)
+            
+            # Process exclusion groups (radio button groups)
+            for exclgroup in self.root_subform.findall("./template:exclGroup", self.namespaces):
+                group = self.process_exclgroup(exclgroup)
+                if group:
+                    self.all_items.append(group)
+        except Exception as e:
+            print(f"Error processing root elements: {e}")
     
     def process_draw(self, draw):
-        """Process a draw element (usually text display)"""
-        draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
-        
-        # Get text content if available
-        text_value = None
-        text_elem = draw.find(".//template:text", self.namespaces)
-        if text_elem is not None and text_elem.text:
-            text_value = text_elem.text
-        
-        # Check for HTML content
-        html_elem = None
-        for elem in draw.findall(".//template:exData", self.namespaces):
-            if elem.attrib.get("contentType") == "text/html":
-                html_elem = elem
-                break
-                
-        if html_elem is not None and html_elem.text:
-            text_value = html_elem.text
-        
-        # Create the field based on draw's purpose
-        # Special handling for FOI statement
-        field_type = "generic_text_display"
-        if "foi" in draw_name.lower():
-            field_type = "foi_statement"
-        elif text_value:
-            text_lower = text_value.lower()
-            if "personal information" in text_lower or "freedom of information" in text_lower:
+        try:
+            """Process a draw element (usually text display)"""
+            draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
+            
+            # Get text content if available
+            text_value = None
+            text_elem = draw.find(".//template:text", self.namespaces)
+            if text_elem is not None and text_elem.text:
+                text_value = text_elem.text
+            
+            # Check for HTML content
+            html_elem = None
+            for elem in draw.findall(".//template:exData", self.namespaces):
+                if elem.attrib.get("contentType") == "text/html":
+                    html_elem = elem
+                    break
+                    
+            if html_elem is not None and html_elem.text:
+                text_value = html_elem.text
+            
+            # Create the field based on draw's purpose
+            # Special handling for FOI statement
+            field_type = "generic_text_display"
+            if "foi" in draw_name.lower():
                 field_type = "foi_statement"
-        
-        # Create text-info field
-        field_obj = {
-            "type": "text-info",
-            "id": self.next_id(),
-            "label": None,
-            "helpText": None,
-            "styles": None,
-            "mask": None,
-            "codeContext": {
-                "name": field_type
-            },
-            "value": text_value,
-            "helperText": " as it appears on official documents"
-        }
-        
-        return field_obj
+            elif text_value:
+                text_lower = text_value.lower()
+                if "personal information" in text_lower or "freedom of information" in text_lower:
+                    field_type = "foi_statement"
+            
+            # Create text-info field
+            field_obj = {
+                "type": "text-info",
+                "id": self.next_id(),
+                "label": None,
+                "helpText": None,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_type
+                },
+                "value": text_value,
+                "helperText": " as it appears on official documents"
+            }
+            
+            self.Report.report_success(draw_name, 'text-info', text_value)
+            return field_obj
+        except Exception as e:
+            print(f"Error processing draw element: {e}")
+            self.Report.report_error(draw_name, 'text-info', text_value)
+            return None
     
     def process_field(self, field):
         """Process a field element"""
