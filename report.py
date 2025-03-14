@@ -14,9 +14,9 @@ class Report:
 
     def _write_report(self):
         """Writes the updated report data to a JSON file."""
-        with open(self.report_file, "w", encoding="utf-8") as file:
+        with open(self.output_file, "w", encoding="utf-8") as file:
             json.dump(self.data, file, indent=4)
-        print(f"📄 New report created: {self.report_file}")
+       # print(f"📄 New report created: {self.output_file}")
 
     def report_success(self, xml_field, json_field, value):
         """Log a successful conversion with file name included."""
