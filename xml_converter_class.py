@@ -532,7 +532,6 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
-    def process_subform(self, subform):
         try:
             """Process a subform element (becomes a group)"""
             subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
@@ -620,6 +619,64 @@ class XDPParser:
             print(f"Error processing subform: {e}")
             return None
     
+    def process_subform(self, subform):
+        try:
+            """Process a subform element (adds it as a top-level group)"""
+            subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
+
+            # Check if this is a repeating subform
+            has_occur = subform.find("./template:occur", self.namespaces) is not None
+
+            # Determine group ID based on name
+            group_id = "1"  # Default
+            if "contact" in subform_name.lower():
+                group_id = "11"
+            elif "submit" in subform_name.lower():
+                group_id = "6"
+
+            # Group label - Capitalize words and add spaces
+            label = " ".join(word.capitalize() for word in subform_name.split("_"))
+            if has_occur:
+                label = f"Table - {label}"
+
+            # Create group for this subform
+            subform_group = {
+                "type": "group",
+                "label": label,
+                "id": self.next_id(),
+                "groupId": group_id,
+                "repeater": has_occur,
+                "codeContext": {
+                    "name": subform_name
+                },
+                "groupItems": [{"fields": []}]
+            }
+
+            # Process fields in this subform
+            for field in subform.findall("./template:field", self.namespaces):
+                field_obj = self.process_field(field)
+                if field_obj:
+                    subform_group["groupItems"][0]["fields"].append(field_obj)
+
+            # Process draw elements (text display)
+            for draw in subform.findall("./template:draw", self.namespaces):
+                draw_obj = self.process_draw(draw)
+                if draw_obj:
+                    subform_group["groupItems"][0]["fields"].append(draw_obj)
+
+            # If subform has fields, add it to top-level items
+            if subform_group["groupItems"][0]["fields"]:
+                self.all_items.append(subform_group)
+
+            # Process nested subforms (add them at the top level, not under this subform)
+            for nested_subform in subform.findall("./template:subform", self.namespaces):
+                self.process_subform(nested_subform)
+
+        except Exception as e:
+         print(f"Error processing subform: {e}")
+
+
+
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
