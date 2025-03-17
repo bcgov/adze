@@ -33,8 +33,9 @@ def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file 
             output_file = os.path.splitext(xdp_file)[0] + '.json'
         
         try:
+            print(f"file_path: {xdp_file}")
             # Convert the XDP to JSON
-            json_data = parse_xdp_to_json(file_path, mapping_file)
+            json_data = parse_xdp_to_json(xdp_file, mapping_file)
             
             # Write the JSON output to file
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -75,7 +76,7 @@ def process_directory(input_dir: str, output_dir: str) -> None:
 if __name__ == "__main__":
     # file_path = './sample_pdfs/eg medium-complexity-A HR0077.xdp'
     parser = argparse.ArgumentParser(description='Convert XDP to JSON.')
-    parser.add_argument('-f', type=str, required=True, help='Path to the XDP file')
+    parser.add_argument('-f', type=str, help='Path to the XDP file')
     parser.add_argument('-m', type=str, default='xml_mapping.json', help='Path to the XML mapping file')
     parser.add_argument('--input-dir', '-i', help='Directory containing XDP files to convert')
     parser.add_argument('--output-dir', '-o', help='Directory for output JSON files')
@@ -101,5 +102,9 @@ if __name__ == "__main__":
     mapping_file = args.m
     # file_path = './sample_pdfs/eg medium-complexity-B HR0095.xdp'
     # result = parse_xdp_to_json(file_path, mapping_file)
-    result = process_file(file_path, output_file, mapping_file)
+    if args.input_dir:
+        result = process_directory(args.input_dir, args.output_dir)
+    else:
+        result = process_file(file_path, output_file, mapping_file)
+        print("XML conversion", "successful" if result else "failed")
     print("XML conversion", "successful" if result else "failed")
