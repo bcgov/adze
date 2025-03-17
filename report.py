@@ -5,16 +5,18 @@ import datetime
 class Report:
     def __init__(self, xml_filename):
         """Initialize report with a timestamped filename for every new run."""
+        os.makedirs("Report", exist_ok=True)
         safe_filename = os.path.splitext(os.path.basename(xml_filename))[0]  # Remove directory path & extension
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current date-time (YYYYMMDD_HHMMSS)
         self.report_file = f"{safe_filename}_report_{timestamp}.json"  # Create unique filename
+        self.output_file = os.path.join("report", self.report_file)
         self.data = {"success": [], "errors": [], "manual_intervention_needed": []}
 
     def _write_report(self):
         """Writes the updated report data to a JSON file."""
-        with open(self.report_file, "w", encoding="utf-8") as file:
+        with open(self.output_file, "w", encoding="utf-8") as file:
             json.dump(self.data, file, indent=4)
-        print(f"📄 New report created: {self.report_file}")
+       # print(f"📄 New report created: {self.output_file}")
 
     def report_success(self, xml_field, json_field, value):
         """Log a successful conversion with file name included."""
