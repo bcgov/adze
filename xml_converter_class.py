@@ -534,24 +534,24 @@ class XDPParser:
     
     def process_subform(self, subform):
         try:
-            """Process a subform element (becomes a group)"""
+            """Process a subform element (adds it as a top-level group)"""
             subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
-            
+
             # Check if this is a repeating subform
             has_occur = subform.find("./template:occur", self.namespaces) is not None
-            
+
             # Determine group ID based on name
             group_id = "1"  # Default
             if "contact" in subform_name.lower():
                 group_id = "11"
             elif "submit" in subform_name.lower():
                 group_id = "6"
-            
-            # Group label - capitalize words and add spaces
+
+            # Group label - Capitalize words and add spaces
             label = " ".join(word.capitalize() for word in subform_name.split("_"))
             if has_occur:
                 label = f"Table - {label}"
-            
+
             # Create group for this subform
             subform_group = {
                 "type": "group",
@@ -562,64 +562,34 @@ class XDPParser:
                 "codeContext": {
                     "name": subform_name
                 },
-                "groupItems": [
-                    {
-                        "fields": []
-                    }
-                ]
+                "groupItems": [{"fields": []}]
             }
-            
+
             # Process fields in this subform
-            fields = []
-            
-            # Process field elements
             for field in subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
-                    fields.append(field_obj)
-            
+                    subform_group["groupItems"][0]["fields"].append(field_obj)
+
             # Process draw elements (text display)
             for draw in subform.findall("./template:draw", self.namespaces):
                 draw_obj = self.process_draw(draw)
                 if draw_obj:
-                    fields.append(draw_obj)
-            
-            # If we found fields, add them to the group
-            if fields:
-                subform_group["groupItems"][0]["fields"] = fields
-                self.Report.report_success(subform_name, 'group', "Subform")
-                return subform_group
-            
-            # If no direct fields but has nested groups, create a container group
-            nested_groups = []
-            
-            # Process nested subforms
+                    subform_group["groupItems"][0]["fields"].append(draw_obj)
+
+            # If subform has fields, add it to top-level items
+            if subform_group["groupItems"][0]["fields"]:
+                self.all_items.append(subform_group)
+
+            # Process nested subforms (add them at the top level, not under this subform)
             for nested_subform in subform.findall("./template:subform", self.namespaces):
-                nested_group = self.process_subform(nested_subform)
-                if nested_group:
-                    nested_groups.append(nested_group)
-            
-            # Process exclGroups
-            for exclgroup in subform.findall("./template:exclGroup", self.namespaces):
-                excl_group = self.process_exclgroup(exclgroup)
-                if excl_group:
-                    nested_groups.append(excl_group)
-            
-            # If we have nested groups but no direct fields, create a container group
-            if nested_groups:
-                # Create a container group to hold the nested groups
-                for group in nested_groups:
-                    self.all_items.append(group)
-                
-                # Return None since we directly added the nested groups to all_items
-                return None
-            
-            # No direct fields and no nested groups - return None
-            return None
+                self.process_subform(nested_subform)
+
         except Exception as e:
-            print(f"Error processing subform: {e}")
-            return None
-    
+         print(f"Error processing subform: {e}")
+
+
+
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
