@@ -6,6 +6,7 @@ import time
 import json
 from typing import Dict, Any, Optional, List
 from xml_converter_class import XDPParser
+from filename_generator import generate_filename
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -40,6 +41,10 @@ def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file:
             if not json_data:
                 logger.warning(f"⚠️ Conversion failed: {xdp_file} (Empty JSON)")
                 return False
+            
+            # Generate unique output filename
+            output_file = generate_filename(xdp_file, "output")
+
             
             # Write the JSON output to file
             with open(output_file, 'w', encoding='utf-8') as f:

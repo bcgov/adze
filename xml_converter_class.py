@@ -6,9 +6,9 @@ from datetime import datetime
 from report import Report
 
 class XDPParser:
-    def __init__(self, file_path, mapping_file='xml_mapping.json'):
+    def __init__(self, xml_filename, mapping_file='xml_mapping.json'):
         try:
-            self.file_path = file_path
+            self.xml_filename = xml_filename
             self.mapping_file = mapping_file
             self.breadcrumb = ""
             self.id_counter = 1
@@ -16,7 +16,7 @@ class XDPParser:
             self.namespaces = None
             
             # Parse the XML file
-            self.tree = ET.parse(file_path)
+            self.tree = ET.parse(xml_filename)
             self.root = self.tree.getroot()
             self.namespaces = self.extract_namespaces()
             
@@ -26,7 +26,7 @@ class XDPParser:
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
-            self.Report = Report(file_path)
+            self.Report = Report(xml_filename)
         except Exception as e:
             print(f"Error initializing XDPParser: {e}")
             raise
@@ -131,8 +131,8 @@ class XDPParser:
             """Create the base output JSON structure"""
             # Extract form ID from filename or default
             form_id = "HR0001"  # Default form ID
-            if "HR" in self.file_path:
-                parts = self.file_path.split("HR")
+            if "HR" in self.xml_filename:
+                parts = self.xml_filename.split("HR")
                 if len(parts) > 1:
                     form_id_part = parts[1].split(".")[0]
                     if form_id_part:
@@ -190,6 +190,9 @@ class XDPParser:
             #     json.dump(self.output_json, json_file, indent=4)
                 
             # print(f"JSON output saved to {output_file}")
+            
+            # ✅ Once all fields are processed, save the report (instead of saving after every field)
+            self.Report.save_report()
             return self.output_json
         except Exception as e:
             print(f"Error in main parse method: {e}")
