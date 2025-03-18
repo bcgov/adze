@@ -1,5 +1,5 @@
 apiVersion: v2
-name: adze
+name: adze-dev
 description: A Helm chart for XML to JSON Converter
 
 # A chart can be either an 'application' or a 'library' chart.

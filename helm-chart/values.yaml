@@ -7,7 +7,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: jiminaot/xml-json-converter
+  repository: jiminaot/xml-json-converter:latest
 
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
@@ -97,7 +97,9 @@ resources:
 
 persistence:
   enabled: true
+  accessMode: ReadWriteMany
   size: 1Gi
+  existingClaim: adze-dev-pvc
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
@@ -118,17 +120,15 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: adze-dev-pvc
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+volumeMounts:
+  - name: data-volume
+    mountPath: /app/data
 
 nodeSelector: {}
 
