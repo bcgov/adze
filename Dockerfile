@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "converter.py", "--watch"]
+CMD ["python", "xml_converter.py", "--watch", "--input-dir", "/app/input", "--output-dir", "/app/output", "-m", "/app/xml_mapping.json"]

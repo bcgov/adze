@@ -173,7 +173,7 @@ class XDPParser:
     def parse(self):
         try:
             """Main parsing method"""
-            if not self.root_subform:
+            if self.root_subform is None:
                 print("Root subform not found")
                 return None
                 
