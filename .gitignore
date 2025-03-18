@@ -1,3 +1,6 @@
 sample_pdfs/
 expected_json/
 converted_json/
+Report/
+.vscode/
+__pycache__/
