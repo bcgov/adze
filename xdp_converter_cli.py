@@ -3,38 +3,40 @@ import os
 import time
 import subprocess
 import glob
+from pathlib import Path
 from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR
 
 def get_latest_report():
     """Fetch the most recent report file from REPORT_DIR."""
-    report_files = sorted(glob.glob(os.path.join(REPORT_DIR, "*.json")), key=os.path.getmtime, reverse=True)
-    return report_files[0] if report_files else None
+    report_files = sorted(Path(REPORT_DIR).glob("*.json"), key=os.path.getmtime, reverse=True)
+    return str(report_files[0]) if report_files else None
 
 def get_latest_output():
     """Fetch the most recent JSON output file from OUTPUT_DIR."""
-    output_files = sorted(glob.glob(os.path.join("output", "*.json")), key=os.path.getmtime, reverse=True)
-    return output_files[0] if output_files else None
+    output_files = sorted(Path(OUTPUT_DIR).glob("*.json"), key=os.path.getmtime, reverse=True)
+    return str(output_files[0]) if output_files else None
 
 def get_all_reports():
     """Fetch all report files sorted by most recent."""
-    report_files = sorted(glob.glob(os.path.join(REPORT_DIR, "*.json")), key=os.path.getmtime, reverse=True)
-    return report_files if report_files else []
+    return [str(file) for file in sorted(Path(REPORT_DIR).glob("*.json"), key=os.path.getmtime, reverse=True)]
 
 def get_all_outputs():
     """Fetch all JSON output files sorted by most recent."""
-    output_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.json")), key=os.path.getmtime, reverse=True)
-    return output_files if output_files else []
+    return [str(file) for file in sorted(Path(OUTPUT_DIR).glob("*.json"), key=os.path.getmtime, reverse=True)]
 
 def format_link(file_path):
-    """Generate clickable file links (works in some terminals)."""
-    abs_path = os.path.abspath(file_path)
-    return f"\033]8;;file://{abs_path}\033\\{file_path}\033]8;;\033\\"  # Clickable file link format
+    """Generate clickable file links."""
+    abs_path = Path(file_path).resolve()
+    return f"\033]8;;file://{abs_path}\033\\{abs_path}\033]8;;\033\\"
 
 def run_conversion():
     xdp_file = inquirer.filepath(message="Select an XDP file to convert:").execute()
+    output_dir = inquirer.text(message=f"Enter the output directory (default: {OUTPUT_DIR}):", default=OUTPUT_DIR).execute()
+
     
     print("\n🛠 Converting XDP to JSON...\n")
-    subprocess.run(["python3", "xml_converter.py", "-f", xdp_file, "-o", "/converted_json"])
+    python_cmd = "python3" if os.name != "nt" else "python"
+    subprocess.run([python_cmd, "xml_converter.py", "-f", f'"{xdp_file}"', "-o", f'"{output_dir}"'])
     time.sleep(1)  
 
     latest_report = get_latest_report()
@@ -50,8 +52,15 @@ def batch_process():
     input_dir = inquirer.text(message=f"Enter the input directory (default: {INPUT_DIR}):", default=INPUT_DIR).execute()
     output_dir = inquirer.text(message=f"Enter the output directory (default: {OUTPUT_DIR}):", default=OUTPUT_DIR).execute()
 
+    # Check if the input directory is empty or contains no XDP files
+    if not os.path.exists(input_dir) or not any(file.endswith(".xdp") for file in os.listdir(input_dir)):
+        print(f"\n⚠ Warning: The input directory '{input_dir}' is empty or contains no XDP files.")
+        print("Ensure there are valid XDP files before running batch processing.\n")
+        return
+
     print("\n🔄 Running batch processing...\n")
-    subprocess.run(["python", "xml_converter.py", "--input-dir", input_dir, "--output-dir", output_dir])
+    python_cmd = "python3" if os.name != "nt" else "python"
+    subprocess.run([python_cmd, "xml_converter.py", "--input-dir", f'"{input_dir}"', "--output-dir", f'"{output_dir}"'])
 
     report_files = get_all_reports()
     output_files = get_all_outputs()
