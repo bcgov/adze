@@ -4,3 +4,5 @@ converted_json/
 Report/
 .vscode/
 __pycache__/
+.env
+/data

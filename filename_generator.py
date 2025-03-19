@@ -9,7 +9,7 @@ load_dotenv()
 # Get directories from environment variables (with defaults)
 INPUT_DIR = os.getenv("INPUT_DIR", "/app/input")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/output")
-REPORTS_DIR = os.getenv("REPORTS_DIR", "/app/report")
+REPORT_DIR = os.getenv("REPORT_DIR", "/app/report")
 
 def generate_filename(xml_filename, file_type):
     """
@@ -26,7 +26,7 @@ def generate_filename(xml_filename, file_type):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # YYYYMMDD_HHMMSS
 
     if file_type == "report":
-        directory = REPORTS_DIR
+        directory = REPORT_DIR
     elif file_type == "output":
         directory = OUTPUT_DIR
     else:
