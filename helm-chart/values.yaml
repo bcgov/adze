@@ -68,7 +68,7 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: xml-json-converter-c79ac4-dev.apps.silver.devops.gov.bc.ca
+    - host: example.com
       paths:
         - path: /
           pathType: ImplementationSpecific
@@ -99,7 +99,6 @@ persistence:
   enabled: true
   accessMode: ReadWriteMany
   size: 1Gi
-  existingClaim: adze-dev-pvc
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
@@ -122,8 +121,6 @@ autoscaling:
 # Additional volumes on the output Deployment definition.
 volumes:
   - name: data-volume
-    persistentVolumeClaim:
-      claimName: adze-dev-pvc
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
