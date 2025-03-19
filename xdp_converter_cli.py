@@ -34,7 +34,7 @@ def run_conversion():
     xdp_file = inquirer.filepath(message="Select an XDP file to convert:").execute()
     
     print("\n🛠 Converting XDP to JSON...\n")
-    subprocess.run(["python", "xml_converter.py", "-f", xdp_file])
+    subprocess.run(["python3", "xml_converter.py", "-f", xdp_file, "-o", "/converted_json"])
     time.sleep(1)  
 
     latest_report = get_latest_report()

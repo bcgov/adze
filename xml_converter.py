@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 def parse_xdp_to_json(file_path, mapping_file='xml_mapping.json'):
     """Main function to convert XDP to JSON"""
     try:
-        logger.info(f"📝 Processing file: {file_path}")
+        # logger.info(f"Processing file: {file_path}")
         parser = XDPParser(file_path, mapping_file)
         return parser.parse()
     except Exception as e:
-        logger.error(f"❌ Error processing XDP: {file_path} - {e}", exc_info=True)
+        # logger.error(f" Error processing XDP: {file_path} - {e}", exc_info=True)
         print(f"Error processing XDP: {e}")
 
 def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file: Optional[str] = 'xml_mapping.json') -> bool:
