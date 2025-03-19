@@ -4,5 +4,7 @@ converted_json/
 Report/
 .vscode/
 __pycache__/
+mapping_output.json
+/__pycache__
 .env
 /data

@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import json
+from typing import Any, Optional
 from typing import Dict, Any, Optional, List
 from xml_converter_class import XDPParser
 from filename_generator import generate_filename
@@ -21,7 +22,7 @@ def parse_xdp_to_json(file_path, mapping_file='xml_mapping.json'):
         logger.error(f"❌ Error processing XDP: {file_path} - {e}", exc_info=True)
         print(f"Error processing XDP: {e}")
 
-def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file: Optional[str] = None) -> bool:
+def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file: Optional[str] = 'xml_mapping.json') -> bool:
         """
         Process a single XDP file and output JSON.
         
@@ -79,7 +80,7 @@ def process_directory(input_dir: str, output_dir: str) -> None:
             input_file = os.path.join(input_dir, filename)
             output_file = os.path.join(output_dir, os.path.splitext(filename)[0] + '.json')
             
-            process_file(input_file, output_file)
+            process_file(input_file, output_file, 'xml_mapping.json')
             files_processed += 1
     
     logger.info(f"Processed {files_processed} XDP files")
@@ -115,7 +116,7 @@ def watch_directory(input_dir: str, output_dir: str, mapping_file: str = "xml_ma
         logger.error(f"❌ Error in watch mode: {e}")
 
 if __name__ == "__main__":
-    # file_path = './sample_pdfs/eg medium-complexity-A HR0077.xdp'
+
     parser = argparse.ArgumentParser(description='Convert XDP to JSON.')
     parser.add_argument('-f', type=str, help='Path to the XDP file')
     parser.add_argument('-m', type=str, default='xml_mapping.json', help='Path to the XML mapping file')
@@ -149,8 +150,7 @@ if __name__ == "__main__":
     file_path = args.f
     output_file = args.output
     mapping_file = args.m
-    # file_path = './sample_pdfs/eg medium-complexity-B HR0095.xdp'
-    # result = parse_xdp_to_json(file_path, mapping_file)
+
     if args.input_dir:
         process_directory(args.input_dir, args.output_dir)
     else:
