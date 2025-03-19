@@ -7,14 +7,9 @@ from pathlib import PurePosixPath
 # load_dotenv()
 
 # Get directories from environment variables (with defaults)
-INPUT_DIR = os.getenv("INPUT_DIR", "/app/input")
-# OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/output")
-# REPORT_DIR = os.getenv("REPORT_DIR", "/app/report")
-
-# INPUT_DIR="./data/input"      # Where the watcher looks for new files
-REPORT_DIR="./data/report"  # Where logs & reports are stored
-OUTPUT_DIR="./data/output"    # Where converted JSON files are stored
-# COMPARE_DIR="./data/compare"
+INPUT_DIR = os.getenv("INPUT_DIR", "./data/input")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./data/output")
+REPORT_DIR = os.getenv("REPORT_DIR", "./data/report")
 
 def generate_filename(xml_filename, file_type):
     """
