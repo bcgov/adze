@@ -1,0 +1,13 @@
+services:
+  xml-json-converter:
+    image: xml-json-converter:latest
+    build: .
+    container_name: xml-json-converter
+    volumes:
+      - ./data/input:/app/input        # Mounts input directory (for new XDP files)
+      - ./data/output:/app/output      # Mounts output directory (for converted JSON files)
+      - ./data/reports:/app/report    # Mounts reports directory (for logs)
+      - ./data/compare:/app/compare
+    env_file:
+      - .env
+    restart: always
