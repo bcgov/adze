@@ -84,26 +84,35 @@ def process_directory(input_dir: str, output_dir: str) -> None:
     
     logger.info(f"Processed {files_processed} XDP files")
 
-def watch_directory(input_dir: str, mapping_file: str = "xml_mapping.json"):
+def watch_directory(input_dir: str, output_dir: str, mapping_file: str = "xml_mapping.json"):
     """Watches for new XDP files and triggers process_file() when they appear."""
-
-    processed_files = set()
+    processed_files = {}  # ✅ Track filename + last modified timestamp
+    input_dir = os.path.normpath(input_dir)
+    output_dir = os.path.normpath(output_dir)
+    
     logger.info(f"📂 Watching directory: {input_dir}")
 
-    while True:
-        try:
+    try:
+        while True:
             for filename in os.listdir(input_dir):
-                if filename.endswith(".xdp") and filename not in processed_files:
-                    file_path = os.path.join(input_dir, filename)
-                    logger.info(f"🔄 New file detected: {file_path}")
+                if filename.endswith(".xdp"):
+                    file_path = os.path.normpath(os.path.join(input_dir, filename))
+                    last_modified = os.path.getmtime(file_path)
 
-                    # ✅ Trigger process_file()
-                    if process_file(file_path, mapping_file=mapping_file):
-                        processed_files.add(filename)
+                    if filename not in processed_files or processed_files[filename] != last_modified:
+                        logger.info(f"🔄 New or modified file detected: {file_path}")
+
+                        output_file = os.path.normpath(os.path.join(output_dir, filename.replace(".xdp", ".json")))
+
+                        # ✅ Process the file and update tracking
+                        if process_file(file_path, output_file, mapping_file=mapping_file):
+                            processed_files[filename] = last_modified
 
             time.sleep(5)  # ✅ Keeps watching for new files
-        except Exception as e:
-            logger.error(f"❌ Error in watcher: {e}")    
+    except KeyboardInterrupt:
+        logger.info("🛑 Watch mode stopped by user.")
+    except Exception as e:
+        logger.error(f"❌ Error in watch mode: {e}")
 
 if __name__ == "__main__":
     # file_path = './sample_pdfs/eg medium-complexity-A HR0077.xdp'
