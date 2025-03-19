@@ -6,3 +6,5 @@ Report/
 __pycache__/
 mapping_output.json
 /__pycache__
+.env
+/data
