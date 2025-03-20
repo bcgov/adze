@@ -95,7 +95,7 @@ catch {
 # Run the XDP converter
 Write-Host "Starting XDP converter using $PythonCmd..." -ForegroundColor Cyan
 try {
-    & $PythonCmd xdp_converter_cli.py $args
+    & $PythonCmd src/xdp_converter_cli.py $args
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "XDP converter exited with code: $LASTEXITCODE" -ForegroundColor Red

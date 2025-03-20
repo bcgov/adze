@@ -6,10 +6,13 @@ from pathlib import PurePosixPath
 # Load environment variables from .env file
 # load_dotenv()
 
-# Get directories from environment variables (with defaults)
-INPUT_DIR = os.getenv("INPUT_DIR", "./data/input")
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./data/output")
-REPORT_DIR = os.getenv("REPORT_DIR", "./data/report")
+# Resolve paths based on the script's actual location
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))  # Get project root
+
+# Get directories from environment variables (fallback to absolute paths)
+INPUT_DIR = os.getenv("INPUT_DIR", os.path.join(BASE_DIR, "data", "input"))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(BASE_DIR, "data", "output"))
+REPORT_DIR = os.getenv("REPORT_DIR", os.path.join(BASE_DIR, "data", "report"))
 
 def generate_filename(xml_filename, file_type):
     """
