@@ -6,23 +6,30 @@ from datetime import datetime
 from report import Report
 
 class XDPParser:
-    def __init__(self, xml_filename, mapping_file='xml_mapping.json'):
+    def __init__(self, xml_filename, mapping_file=None):
         try:
             self.xml_filename = xml_filename
+            
+            # Dynamically resolve the mapping file path if not provided
+            if mapping_file is None:
+                script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+                project_root = os.path.abspath(os.path.join(script_dir, ".."))  # Move up to project root
+                mapping_file = os.path.join(project_root, "xml_mapping.json")  # Construct full path
+
             self.mapping_file = mapping_file
             self.breadcrumb = ""
             self.id_counter = 1
             self.mapping = self.load_mapping_file()
             self.namespaces = None
-            
+
             # Parse the XML file
             self.tree = ET.parse(xml_filename)
             self.root = self.tree.getroot()
             self.namespaces = self.extract_namespaces()
-            
+
             # Find the root subform
             self.root_subform = self.root.find(".//template:subform", self.namespaces)
-            
+
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
@@ -191,7 +198,7 @@ class XDPParser:
                 
             # print(f"JSON output saved to {output_file}")
             
-            # ✅ Once all fields are processed, save the report (instead of saving after every field)
+            # Once all fields are processed, save the report (instead of saving after every field)
             self.Report.save_report()
             return self.output_json
         except Exception as e:
