@@ -1,10 +1,10 @@
 import datetime
 import os
 from pathlib import PurePosixPath
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# load_dotenv()
 
 # Get directories from environment variables (with defaults)
 INPUT_DIR = os.getenv("INPUT_DIR", "./data/input")
