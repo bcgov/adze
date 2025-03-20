@@ -167,4 +167,4 @@ echo "Dependency installation completed!"
 
 # Run the XDP converter
 echo "Starting XDP converter using $PYTHON_CMD..."
-$PYTHON_CMD xdp_converter_cli.py "$@"
+$PYTHON_CMD src/xdp_converter_cli.py "$@"

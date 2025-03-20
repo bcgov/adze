@@ -5,6 +5,7 @@ import subprocess
 import glob
 from pathlib import Path
 from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR
+import platform
 
 def get_latest_report():
     """Fetch the most recent report file from REPORT_DIR."""
@@ -25,9 +26,22 @@ def get_all_outputs():
     return [str(file) for file in sorted(Path(OUTPUT_DIR).glob("*.json"), key=os.path.getmtime, reverse=True)]
 
 def format_link(file_path):
-    """Generate clickable file links."""
+    """Generate clickable file links that work across more terminals."""
+    
     abs_path = Path(file_path).resolve()
-    return f"\033]8;;file://{abs_path}\033\\{abs_path}\033]8;;\033\\"
+    
+    # Check terminal environment
+    term = os.environ.get('TERM_PROGRAM', '')
+    
+    if term in ['iTerm.app', 'vscode'] or 'VSCODE' in os.environ:
+        # Use OSC 8 for terminals that support it
+        return f"\033]8;;file://{abs_path}\033\\{abs_path}\033]8;;\033\\"
+    elif platform.system() == 'Darwin' and term == 'Apple_Terminal':
+        # Mac Terminal fallback - just show the path
+        return f"{abs_path}"
+    else:
+        # Default fallback
+        return f"{abs_path}"
 
 def run_conversion():
     xdp_file = inquirer.filepath(message="Select an XDP file to convert:").execute()
@@ -38,7 +52,7 @@ def run_conversion():
     
     print("\n🛠 Converting XDP to JSON...\n")
     python_cmd = "python3" if os.name != "nt" else "python"
-    script_path = os.path.join("src", "xml_converter.py")
+    script_path = os.path.join("src","xml_converter.py")
     result = subprocess.run([
         python_cmd, script_path, 
         "-f", os.path.normpath(xdp_file), 
