@@ -9,7 +9,7 @@ The **XML to JSON Converter** is a command-line tool designed to convert XFA-bas
 
 To install the required dependencies, run:
 ```sh
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ---
