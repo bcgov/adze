@@ -55,7 +55,7 @@ class Report:
         """Writes the final report to a JSON file (only once)."""
         total_fields = self.total_success + self.total_errors + self.total_manual_intervention
         success_rate = (self.total_success / total_fields * 100) if total_fields > 0 else 0
-        self.data["summary"] = {
+        summary = {
             "total_fields": total_fields,
             "total_success": self.total_success,
             "total_errors": self.total_errors,
@@ -63,7 +63,16 @@ class Report:
             "success_rate": f"{success_rate:.2f}%"
         }
 
+        # Create a ordered dictionary
+        final_report = {
+            "summary": summary,
+            "success": self.data["success"],
+            "errors": self.data["errors"],
+            "manual_intervention_needed": self.data["manual_intervention_needed"]
+        }
+
         with open(self.report_file, "w", encoding="utf-8") as file:
-            json.dump(self.data, file, indent=4)
+            json.dump(final_report, file, indent=4)
 
         logger.info(f"✅ Report successfully saved: {self.report_file}")
+
