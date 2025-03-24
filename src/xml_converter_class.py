@@ -490,7 +490,57 @@ class XDPParser:
                     # Apply any dataSource mappings
                     if mapping and mapping.get("dataSource"):
                         field_obj["databindings"]["source"] = mapping.get("dataSource")
-            
+            elif ui_tag == "dateTimeEdit":
+            # Extract the date format if available
+                date_format = "yyyy-MM-dd"  # Default format
+                format_elem = field.find("./template:format/template:picture", self.namespaces)
+                if format_elem is not None and format_elem.text:
+                    date_format = format_elem.text.lower().replace("yyyy", "Y").replace("dd", "d").replace("mm", "m")
+
+                # Define validation rules
+                validation_rules = [
+                    {
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": "Date of birth should be submitted"
+                    },
+                    {
+                        "type": "maxDate",
+                        "value": "2024-09-01",
+                        "errorMessage": "Date should be less than September 1st 2024 due to legislation"
+                    },
+                    {
+                        "type": "minDate",
+                        "value": "2000-01-01",
+                        "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
+                    },
+                    {
+                        "type": "javascript",
+                        "value": "{ const birthDate = new Date(value); const today = new Date();"
+                                " const age = today.getFullYear() - birthDate.getFullYear();"
+                                " const monthDiff = today.getMonth() - birthDate.getMonth();"
+                                " const dayDiff = today.getDate() - birthDate.getDate();"
+                                " if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) { age--; }"
+                                " return age >= 18; }",
+                        "errorMessage": "You must be at least 18 years old."
+                    }
+                ]
+
+                # Create the JSON structure for date-picker
+                field_obj = {
+                    "type": "date-picker",
+                    "label": caption_text or "Date Field",
+                    "id": self.next_id(),
+                    "fieldId": str(self.next_id()),
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "labelText": caption_text or "Date Field",
+                    "placeholder": "yyyy-MM-dd",
+                    "mask": date_format,
+                    "validation": validation_rules
+                }
+           
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
             
