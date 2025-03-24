@@ -552,7 +552,44 @@ class XDPParser:
                     },
                     "buttonType": "submit"
                 }
-            
+            if ui_tag == "choiceList":
+                field_obj = {
+                "id": self.next_id(),
+                "mask": None,
+                "size": "md",
+                "type": "dropdown",
+                "label": caption_text if caption_text else "Dropdown",
+                "styles": None,
+                "isMulti": False,
+                "helpText": None,
+                "isInline": False,
+                "direction": "bottom",
+                "listItems": [],  # List of dropdown options
+                "helperText": "",
+                "codeContext": {
+                    "name": field_name
+                },
+                "customStyle": {
+                    "printColumns": "2"
+                },
+                "placeholder": "",
+                "selectionFeedback": "top-after-reopen"
+            }
+
+            # ✅ Extract visible items from `<items>` tag
+            visible_items = field.findall("./template:items/template:text", self.namespaces)
+            saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
+
+            # 🛠️ Ensure correct mapping of labels and values
+            list_items = []
+            for index, item in enumerate(visible_items):
+                value = saved_values[index].text if index < len(saved_values) else item.text
+                if item.text:
+                    list_items.append({"text": item.text.strip(), "value": value.strip()})
+
+            field_obj["listItems"] = list_items
+            if binding_ref:
+                field_obj["databindings"] = {"path": binding_ref}
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
             
