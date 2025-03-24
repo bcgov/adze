@@ -540,7 +540,19 @@ class XDPParser:
                     "mask": date_format,
                     "validation": validation_rules
                 }
-           
+            elif ui_tag == "button":
+                field_obj = {
+                    "type": "button",
+                    "id": self.next_id(),
+                    "label": caption_text,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "buttonType": "submit"
+                }
+            
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
             
