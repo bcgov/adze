@@ -137,14 +137,7 @@ class XDPParser:
         try:
             """Create the base output JSON structure"""
             # Extract form ID from filename or default
-            form_id = "HR0001"  # Default form ID
-            if "HR" in self.xml_filename:
-                parts = self.xml_filename.split("HR")
-                if len(parts) > 1:
-                    form_id_part = parts[1].split(".")[0]
-                    if form_id_part:
-                        form_id = f"HR{form_id_part}"
-            
+            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]  # Remove extension
             # Get form title if available
             form_title = "Work Search Activity Record"  # Default title
             
