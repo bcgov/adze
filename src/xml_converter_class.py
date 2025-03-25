@@ -215,7 +215,7 @@ class XDPParser:
                         "groupId": str(self.mapping["constants"]["ministry_id"]),
                         "repeater": False,
                         "codeContext": {
-                            "name": "master_page"
+                            "name": None
                         },
                         "groupItems": [
                             {
@@ -249,10 +249,10 @@ class XDPParser:
                     "styles": None,
                     "mask": None,
                     "codeContext": {
-                        "name": draw_name
+                        "name": None
                     },
                     "value": text_value,
-                    "helperText": " as it appears on official documents"
+                    "helperText": None
                 }
                 page_fields.append(text_field)
                 self.Report.report_success(draw_name, 'text-info', text_value)
@@ -338,10 +338,10 @@ class XDPParser:
                 "styles": None,
                 "mask": None,
                 "codeContext": {
-                    "name": field_type
+                    "name": None
                 },
                 "value": text_value,
-                "helperText": " as it appears on official documents"
+                "helperText": None
             }
             
             # Apply any additional mapping properties
@@ -429,10 +429,10 @@ class XDPParser:
                     "styles": None,
                     "mask": None,
                     "codeContext": {
-                        "name": field_name
+                        "name": None
                     },
                     "placeholder": None,
-                    "helperText": " as it appears on official documents",
+                    "helperText": None,
                     "inputType": "text"
                 }
                 
@@ -471,7 +471,7 @@ class XDPParser:
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
-                        "name": field_name
+                        "name": None
                     },
                     "value": None,
                     "inputType": "number"
@@ -521,14 +521,14 @@ class XDPParser:
 
                 # Create the JSON structure for date-picker
                 field_obj = {
-                    "type": "date-picker",
+                    "type": "date",
                     "label": caption_text or "Date Field",
                     "id": self.next_id(),
                     "fieldId": str(self.next_id()),
                     "codeContext": {
-                        "name": field_name
+                        "name": None
                     },
-                    "labelText": caption_text or "Date Field",
+                    "label": caption_text or "Date Field",
                     "placeholder": None,
                     "mask": date_format,
                     "validation": validation_rules
@@ -541,7 +541,7 @@ class XDPParser:
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
-                        "name": field_name
+                        "name": None
                     },
                     "buttonType": "submit"
                 }
@@ -600,7 +600,7 @@ class XDPParser:
                 "groupId": group_id,
                 "repeater": has_occur,
                 "codeContext": {
-                    "name": subform_name
+                    "name": None
                 },
                 "groupItems": [{"fields": []}]
             }
@@ -643,7 +643,7 @@ class XDPParser:
                 "groupId": "1",
                 "repeater": False,
                 "codeContext": {
-                    "name": group_name
+                    "name": None
                 },
                 "groupItems": [
                     {
