@@ -155,11 +155,11 @@ class XDPParser:
                     break
             
             return {
-                "version": self.mapping["constants"]["version"],
+                "version": None,
                 "ministry_id": self.mapping["constants"]["ministry_id"],
-                "id": str(uuid.uuid4()),
+                "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                "title": form_title,
+                "title": None,
                 "form_id": form_id,
                 "deployed_to": None,
                 "dataSources": []
@@ -167,11 +167,11 @@ class XDPParser:
         except Exception as e:
             print(f"Error creating output structure: {e}")
             return {
-                "version": "1.0",
+                "version": None,
                 "ministry_id": "0",
-                "id": str(uuid.uuid4()),
+                "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                "title": "Form",
+                "title": None,
                 "form_id": "FORM0001",
                 "deployed_to": None,
                 "dataSources": []
