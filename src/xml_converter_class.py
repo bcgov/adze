@@ -431,7 +431,7 @@ class XDPParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "placeholder": "Enter your ",
+                    "placeholder": None,
                     "helperText": " as it appears on official documents",
                     "inputType": "text"
                 }
@@ -529,7 +529,7 @@ class XDPParser:
                         "name": field_name
                     },
                     "labelText": caption_text or "Date Field",
-                    "placeholder": "yyyy-MM-dd",
+                    "placeholder": None,
                     "mask": date_format,
                     "validation": validation_rules
                 }
