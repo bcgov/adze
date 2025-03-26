@@ -1,19 +1,24 @@
-FROM python:3.12-slim AS builder
-
-# Set a non-root user for security
-RUN addgroup --system appgroup && adduser --system --group appuser
+FROM python:3.9
 
 WORKDIR /app
 
-# Copy requirements and install dependencies
+# Copy dependencies and script
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY run_script.sh .
 
-# Copy application files
+# Copy the rest of the code
 COPY . .
 
-# Change ownership of the files to the non-root user
-RUN chown -R appuser:appgroup /app
+# Make sure the run script is executable
+RUN chmod +x /app/run_script.sh
 
-# Switch to non-root user
-USER appuser
+# Set default environment variables
+ENV INPUT_DIR=/app/data/input \
+  OUTPUT_DIR=/app/data/output \
+  REPORT_DIR=/app/data/report
+
+# Ensure folders exist
+RUN mkdir -p $INPUT_DIR $OUTPUT_DIR $REPORT_DIR
+
+# Entry point to run the CLI
+CMD ["./run_script.sh"]
