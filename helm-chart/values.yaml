@@ -20,6 +20,13 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+appMode: web
+
+env:
+  INPUT_DIR: /app/data/input
+  OUTPUT_DIR: /app/data/output
+  REPORT_DIR: /app/data/report
+
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
   # Specifies whether a service account should be created

@@ -60,6 +60,16 @@ spec:
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          env:
+            - name: MODE
+              value: {{ .Values.appMode | quote }}
+            - name: INPUT_DIR
+              value: {{ .Values.env.INPUT_DIR | quote }}
+            - name: OUTPUT_DIR
+              value: {{ .Values.env.OUTPUT_DIR | quote }}
+            - name: REPORT_DIR
+              value: {{ .Values.env.REPORT_DIR | quote }}
+
       {{- with .Values.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
