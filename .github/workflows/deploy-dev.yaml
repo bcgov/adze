@@ -1,0 +1,25 @@
+name: Deploy to OpenShift
+
+on:
+  push:
+    branches:
+      - main
+      - test/dev-deploy-aot-snapshot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to OpenShift
+        run: |
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install adze-dev ./helm-chart \
+            --namespace ${{ secrets.OPENSHIFT_NAMESPACE }} \
+            -f values.yaml
