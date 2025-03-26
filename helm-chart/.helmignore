@@ -1,0 +1,22 @@
+# Common files to ignore
+.DS_Store
+*.tgz
+*.swp
+*.bak
+*.tmp
+
+# Version control
+.git
+.gitignore
+
+# OS / Editor artifacts
+.idea/
+.vscode/
+*.log
+
+# Build directories
+charts/
+node_modules/
+tmp/
+test/
+tests/

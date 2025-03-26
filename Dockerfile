@@ -17,5 +17,3 @@ RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
-
-CMD ["python", "xml_converter.py", "--watch", "--input-dir", "/app/input", "--output-dir", "/app/output", "-m", "/app/xml_mapping.json"]

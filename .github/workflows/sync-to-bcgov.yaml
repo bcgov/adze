@@ -1,0 +1,23 @@
+name: Sync to BC Gov Repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout AOT repo
+        uses: actions/checkout@v3
+
+      - name: Push to BC Gov repo
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+
+          git remote add bcgov https://x-access-token:${{ secrets.BCGOV_REPO_TOKEN }}@github.com/bcgov/adze.git
+
+          git push bcgov main:main
