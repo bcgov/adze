@@ -34,4 +34,4 @@ jobs:
         run: |
           helm upgrade --install adze-dev ./helm-chart \
             --namespace ${{ secrets.OPENSHIFT_NAMESPACE }} \
-            -f values.yaml
+            -f helm-chart/values.yaml
