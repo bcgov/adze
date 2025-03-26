@@ -545,7 +545,79 @@ class XDPParser:
                     },
                     "buttonType": "submit"
                 }
-            
+            elif ui_tag == "choiceList":
+                field_obj = {
+                "id": self.next_id(),
+                "mask": None,
+                "size": "md",
+                "type": "dropdown",
+                "label": caption_text if caption_text else "Dropdown",
+                "styles": None,
+                "isMulti": False,
+                "helpText": None,
+                "isInline": False,
+                "direction": "bottom",
+                "listItems": [],  # List of dropdown options
+                "helperText": "",
+                "codeContext": {
+                    "name": field_name
+                },
+                "customStyle": {
+                    "printColumns": "2"
+                },
+                "placeholder": "",
+                "selectionFeedback": "top-after-reopen"
+            }
+             # ✅ Extract visible items from `<items>` tag
+                visible_items = field.findall("./template:items/template:text", self.namespaces)
+                saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
+
+                # 🛠️ Ensure correct mapping of labels and values
+                list_items = []
+                for index, item in enumerate(visible_items):
+                    value = saved_values[index].text if index < len(saved_values) else item.text
+                    if item.text:
+                        list_items.append({"text": item.text.strip(), "value": value.strip()})
+
+                field_obj["listItems"] = list_items
+           
+            elif ui_tag == "checkButton":
+                field_obj = {
+                    "type": "checkbox",
+                    "id": self.next_id(),
+                    "label": caption_text if caption_text else "Checkbox",
+                    "helperText": "",
+                    "webStyles": None,
+                    "pdfStyles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "databindings": {},
+                    "listItems": []  # ✅ Add listItems support
+                }
+
+                
+                # ✅ Extract available checkbox options (integer values)
+                items_elem = field.findall("./template:items/template:integer", self.namespaces)
+                if items_elem:
+                    for item in items_elem:
+                        item_value = item.text.strip() if item.text else "Unknown"
+                        field_obj["listItems"].append({"text": item_value, "value": item_value})
+
+                # ✅ Extract checkbox default value (1 = checked, 0 = unchecked)
+                value_elem = field.find("./template:value/template:integer", self.namespaces)
+                if value_elem is not None:
+                    field_obj["value"] = value_elem.text.strip() == "1"
+                    # ✅ Assign Data Bindings (source & path)
+                    binding_elem = field.find("./template:bind", self.namespaces)
+                    if binding_elem is not None and 'ref' in binding_elem.attrib:
+                        binding_ref = binding_elem.attrib['ref']
+                        field_obj["databindings"] = {
+                            "source": None,  # Adjust this if needed
+                            "path": binding_ref
+                        }
+
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
             
