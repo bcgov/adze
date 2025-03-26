@@ -1,10 +1,21 @@
+# Virtual environment
+.venv/
+
+# Environment variables
+.env
+
+# Compiled Python files
+__pycache__/
+*/__pycache__/
+*.py[cod]
+
+# VS Code settings
+.vscode/
+
+# Data and generated files
+/data/
 sample_pdfs/
 expected_json/
 converted_json/
 Report/
-.vscode/
-__pycache__/
 mapping_output.json
-/__pycache__
-.env
-/data
