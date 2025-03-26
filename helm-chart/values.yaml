@@ -69,7 +69,7 @@ service:
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: true
-  className: ""
+  className: openshift-default
   annotations:
     {}
     # kubernetes.io/ingress.class: nginx
@@ -78,8 +78,9 @@ ingress:
     - host: adze-dev-c79ac4-dev.apps.silver.devops.gov.bc.ca
       paths:
         - path: /
-          pathType: ImplementationSpecific
-  tls: []
+          pathType: Prefix
+  tls:
+    - {}
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
