@@ -1,10 +1,6 @@
 import datetime
 import os
 from pathlib import PurePosixPath
-# from dotenv import load_dotenv
-
-# Load environment variables from .env file
-# load_dotenv()
 
 # Resolve paths based on the script's actual location
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))  # Get project root
