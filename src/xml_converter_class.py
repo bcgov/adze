@@ -210,7 +210,7 @@ class XDPParser:
                 if page_fields:
                     master_page = {
                         "type": "group",
-                        "label": "Master Page",
+                        "label": None,
                         "id": self.next_id(),
                         "groupId": str(self.mapping["constants"]["ministry_id"]),
                         "repeater": False,
@@ -522,13 +522,13 @@ class XDPParser:
                 # Create the JSON structure for date-picker
                 field_obj = {
                     "type": "date",
-                    "label": caption_text or "Date Field",
+                    "label": caption_text,
                     "id": self.next_id(),
                     "fieldId": str(self.next_id()),
                     "codeContext": {
                         "name": None
                     },
-                    "label": caption_text or "Date Field",
+                    "label": caption_text,
                     "placeholder": None,
                     "mask": date_format,
                     "validation": validation_rules
