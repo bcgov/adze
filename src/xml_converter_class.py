@@ -208,6 +208,7 @@ class XDPParser:
                 page_fields = self.process_page_fields(pageset)
                 # Add master page group if we found any fields
                 if page_fields:
+
                     # master_page = {
                     #     "type": "group",
                     #     "label": "Master Page",
@@ -224,7 +225,6 @@ class XDPParser:
                     #     ]
                     # }
                     self.all_items.append(page_fields)
-
         except Exception as e:
             print(f"Error processing master pages: {e}")
     
@@ -706,7 +706,7 @@ class XDPParser:
                             field_obj["validation"].append(field_script)
                         else:
                             field_obj["validation"] = [field_script]
-                    subform_group["groupItems"][0]["fields"].append(field_obj)
+                    self.all_items.append(field_obj)
 
             # Process draw elements (text display)
             for draw in subform.findall("./template:draw", self.namespaces):
