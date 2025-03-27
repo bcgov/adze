@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helm-chart.fullname" . }}-cli-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: cli
+          image: "{{ .Values.image.repository }}:cli"
+          command: ["/bin/bash", "-c", "./run_script.sh"]
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+      restartPolicy: Never
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "helm-chart.fullname" $ }}-pvc
