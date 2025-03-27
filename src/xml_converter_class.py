@@ -208,22 +208,23 @@ class XDPParser:
                 page_fields = self.process_page_fields(pageset)
                 # Add master page group if we found any fields
                 if page_fields:
-                    master_page = {
-                        "type": "group",
-                        "label": None,
-                        "id": self.next_id(),
-                        "groupId": str(self.mapping["constants"]["ministry_id"]),
-                        "repeater": False,
-                        "codeContext": {
-                            "name": None
-                        },
-                        "groupItems": [
-                            {
-                                "fields": page_fields
-                            }
-                        ]
-                    }
-                    self.all_items.append(master_page)
+                    # master_page = {
+                    #     "type": "group",
+                    #     "label": "Master Page",
+                    #     "id": self.next_id(),
+                    #     "groupId": str(self.mapping["constants"]["ministry_id"]),
+                    #     "repeater": False,
+                    #     "codeContext": {
+                    #         "name": "master_page"
+                    #     },
+                    #     "groupItems": [
+                    #         {
+                    #             "fields": page_fields
+                    #         }
+                    #     ]
+                    # }
+                    self.all_items.append(page_fields)
+
         except Exception as e:
             print(f"Error processing master pages: {e}")
     
@@ -711,11 +712,7 @@ class XDPParser:
             for draw in subform.findall("./template:draw", self.namespaces):
                 draw_obj = self.process_draw(draw)
                 if draw_obj:
-                    subform_group["groupItems"][0]["fields"].append(draw_obj)
-
-            # If subform has fields, add it to top-level items
-            if subform_group["groupItems"][0]["fields"]:
-                self.all_items.append(subform_group)
+                    self.all_items.append(draw_obj)
 
             # Process nested subforms (add them at the top level, not under this subform)
             for nested_subform in subform.findall("./template:subform", self.namespaces):
