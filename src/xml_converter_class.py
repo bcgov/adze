@@ -267,7 +267,7 @@ class XDPParser:
         try:
             """Process top-level elements in the main subform"""
             # First, check for any direct field or draw elements
-            for draw in self.root_subform.findall("./template:draw", self.namespaces):
+            for draw in self.root_subform.findall(".//template:draw", self.namespaces):
                 field = self.process_draw(draw)
                 if field:
                     self.all_items.append(field)
@@ -323,7 +323,8 @@ class XDPParser:
                     break
                     
             if html_elem is not None and html_elem.text:
-                text_value = html_elem.text
+                # text_value = html_elem.text
+                text_value = self.extract_text_from_exdata(elem)
             
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
@@ -774,3 +775,26 @@ class XDPParser:
                                     'group', 
                                     "Error processing exclusion group")
             return None
+    
+    def extract_text_from_exdata(self, exdata_elem):
+        # Get all text content recursively
+        all_text = []
+        
+        # Define function to extract text from element and its children
+        def extract_text(element):
+            if element.text and element.text.strip():
+                all_text.append(element.text.strip())
+            
+            for child in element:
+                extract_text(child)
+                
+            if element.tail and element.tail.strip():
+                all_text.append(element.tail.strip())
+        
+        # Start extraction with the body element inside exData
+        body_elem = exdata_elem.find(".//{http://www.w3.org/1999/xhtml}body")
+        if body_elem is not None:
+            extract_text(body_elem)
+        
+        # Join all text pieces with space
+        return " ".join(all_text)
