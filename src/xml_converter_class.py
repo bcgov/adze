@@ -791,9 +791,8 @@ class XDPParser:
             if element.tail and element.tail.strip():
                 all_text.append(element.tail.strip())
         
-        # Start extraction with the body element inside exData
-        body_elem = exdata_elem.find(".//{http://www.w3.org/1999/xhtml}body")
-        if body_elem is not None:
+        # Start extraction with the body element directly under exdata_elem
+        for body_elem in exdata_elem.findall("body"):
             extract_text(body_elem)
         
         # Join all text pieces with space
