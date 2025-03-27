@@ -274,6 +274,12 @@ class XDPParser:
             for field in self.root_subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in field_obj:
+                            field_obj["validation"].append(field_script)
+                        else:
+                            field_obj["validation"] = [field_script]
                     self.all_items.append(field_obj)
             
             # Then process subforms (which become groups)
@@ -644,6 +650,18 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
+    def process_script(self, field):
+        # Look for script tags and process them
+        script_tags = field.findall(".//template:script", self.namespaces)
+        for script_tag in script_tags:
+            script_text = script_tag.text
+            if script_text:
+                return {
+                    "type": "javascript",
+                    "value": script_text,
+                    "errorMessage": None
+                }
+
     def process_subform(self, subform):
         try:
             """Process a subform element (adds it as a top-level group)"""
@@ -681,6 +699,12 @@ class XDPParser:
             for field in subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in field_obj:
+                            field_obj["validation"].append(field_script)
+                        else:
+                            field_obj["validation"] = [field_script]
                     subform_group["groupItems"][0]["fields"].append(field_obj)
 
             # Process draw elements (text display)
@@ -732,6 +756,12 @@ class XDPParser:
                     # Make sure it's a radio button and set the group name
                     if radio_obj["type"] == "radio":
                         radio_obj["groupName"] = group_name
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in radio_obj:
+                            radio_obj["validation"].append(field_script)
+                        else:
+                            radio_obj["validation"] = [field_script]
                     fields.append(radio_obj)
             
             # If we found fields, add them to the group
