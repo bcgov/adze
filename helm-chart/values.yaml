@@ -20,7 +20,10 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-appMode: web
+environment:
+  name: dev
+  appMode: web
+  debug: true
 
 env:
   INPUT_DIR: /app/data/input
