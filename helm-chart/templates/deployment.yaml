@@ -72,7 +72,9 @@ spec:
 
       {{- with .Values.volumes }}
       volumes:
-        {{- toYaml . | nindent 8 }}
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "helm-chart.fullname" $ }}-pvc
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
