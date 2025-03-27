@@ -3,7 +3,7 @@ name: Deploy to OpenShift
 on:
   push:
     branches:
-      - dev
+      - main
 
 jobs:
   deploy:
@@ -27,10 +27,10 @@ jobs:
 
       - name: Login to OpenShift
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN_PROD }} --insecure-skip-tls-verify
 
-      - name: Deploy to OpenShift (Dev)
+      - name: Deploy to OpenShift (Prod)
         run: |
-          helm upgrade --install adze-dev ./helm-chart \
-            --namespace ${{ secrets.OPENSHIFT_NAMESPACE }} \
-            -f helm-chart/values-dev.yaml
+          helm upgrade --install adze-prod ./helm-chart \
+            --namespace ${{ secrets.OPENSHIFT_NAMESPACE_PROD }} \
+            -f helm-chart/values-prod.yaml

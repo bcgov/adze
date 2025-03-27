@@ -62,7 +62,7 @@ spec:
           {{- end }}
           env:
             - name: MODE
-              value: {{ .Values.appMode | quote }}
+              value: {{ .Values.environment.appMode | quote }}
             - name: INPUT_DIR
               value: {{ .Values.env.INPUT_DIR | quote }}
             - name: OUTPUT_DIR
