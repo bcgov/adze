@@ -2,7 +2,6 @@ from InquirerPy import inquirer
 import os
 import time
 import subprocess
-import glob
 from pathlib import Path
 from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR
 import platform
