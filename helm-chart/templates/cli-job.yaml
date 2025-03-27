@@ -8,6 +8,7 @@ spec:
       containers:
         - name: cli
           image: "{{ .Values.image.repository }}:cli"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/bin/bash", "-c", "./run_script.sh"]
           volumeMounts:
             - name: data-volume
