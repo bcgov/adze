@@ -9,7 +9,7 @@ if [ "$MODE" = "web" ]; then
 
 elif [ "$MODE" = "cli" ]; then
   echo "⚙️  Running CLI conversion..."
-  ./run_script.sh
+  ./run_script_oc.sh
 
 else
   echo "❌ Unknown MODE: $MODE"
