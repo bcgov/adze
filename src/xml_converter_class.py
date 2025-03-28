@@ -595,6 +595,25 @@ class XDPParser:
                             "source": None,  # Adjust this if needed
                             "path": binding_ref
                         }
+            elif ui_tag == "signature":
+                field_obj = {
+                    "id": self.next_id(),
+                    "mask": None,
+                    "type": "text-input",  # Overriding from "signature" to "text-input"
+                    "label": caption_text if caption_text else None,
+                    "styles": None,
+                    "helpText": help_text,
+                    "inputType": "text",
+                    "helperText": "",
+                    "codeContext": {
+                        "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
+                    },
+                    "customStyle": {
+                        "printColumns": "2"
+                    },
+                    "placeholder": ""
+                }
+
 
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
