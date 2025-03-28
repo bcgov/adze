@@ -1,0 +1,18 @@
+# escape=`
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+
+SHELL ["powershell", "-Command"]
+
+# Install Python
+RUN Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.exe -OutFile python-installer.exe ; `
+  Start-Process -Wait -FilePath .\python-installer.exe -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" ; `
+  Remove-Item python-installer.exe
+
+# Create working dir
+WORKDIR C:\app
+
+# Copy all files
+COPY . .
+
+# Default command
+CMD ["powershell.exe", ".\\run_script.ps1"]
