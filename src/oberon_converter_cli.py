@@ -63,8 +63,9 @@ def convert_xml_to_json(input_path, mapping_path, output_path=None):
             return False
         
         # Generate output path if not provided
-        if output_path is None:
-            output_path = generate_filename(input_path, "output")
+        if output_path is None or os.path.isdir(output_path):
+            output_path = os.path.join(output_path or "output", generate_filename(input_path, "output"))
+
         
         # Write output to file
         logger.info(f"Writing output to {output_path}")
