@@ -1,11 +1,21 @@
+#!/usr/bin/env python3
 from InquirerPy import inquirer
 import os
 import time
 import subprocess
-import glob
+import argparse
+import json
+import sys
+import logging
+from datetime import datetime
 from pathlib import Path
-from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR
+from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR, generate_filename
+from oberon_converter_class import OberonParser
 import platform
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def get_latest_report():
     """Fetch the most recent report file from REPORT_DIR."""
@@ -27,42 +37,102 @@ def get_all_outputs():
 
 def format_link(file_path):
     """Generate clickable file links that work across more terminals."""
-    
     abs_path = Path(file_path).resolve()
-    
-    # Check terminal environment
     term = os.environ.get('TERM_PROGRAM', '')
     
     if term in ['iTerm.app', 'vscode'] or 'VSCODE' in os.environ:
-        # Use OSC 8 for terminals that support it
         return f"\033]8;;file://{abs_path}\033\\{abs_path}\033]8;;\033\\"
     elif platform.system() == 'Darwin' and term == 'Apple_Terminal':
-        # Mac Terminal fallback - just show the path
         return f"{abs_path}"
     else:
-        # Default fallback
         return f"{abs_path}"
 
+def validate_input_file(input_path):
+    """Validate that the input file exists and has a valid extension"""
+    if not os.path.exists(input_path):
+        logger.error(f"Input file not found: {input_path}")
+        return False
+    
+    _, ext = os.path.splitext(input_path)
+    if ext.lower() not in ['.xml', '.xdp']:
+        logger.error(f"Input file must be an XML or XDP file: {input_path}")
+        return False
+    
+    return True
+
+def validate_mapping_file(mapping_path):
+    """Validate that the mapping file exists and is a JSON file"""
+    if not os.path.exists(mapping_path):
+        logger.error(f"Mapping file not found: {mapping_path}")
+        return False
+    
+    _, ext = os.path.splitext(mapping_path)
+    if ext.lower() != '.json':
+        logger.error(f"Mapping file must be a JSON file: {mapping_path}")
+        return False
+    
+    return True
+
+def convert_xml_to_json(input_path, mapping_path, output_path=None):
+    """Convert Oberon XML to JSON"""
+    try:
+        # Initialize parser
+        logger.info(f"Initializing parser for {input_path}")
+        parser = OberonParser(input_path, mapping_path)
+        
+        # Parse the XML file
+        logger.info("Parsing XML file...")
+        output_json = parser.parse()
+        
+        if output_json is None:
+            logger.error("Failed to parse XML file")
+            return False
+        
+        # Generate output path if not provided
+        if output_path is None:
+            output_path = generate_filename(input_path, "output")
+        
+        # Write output to file
+        logger.info(f"Writing output to {output_path}")
+        with open(output_path, 'w') as f:
+            json.dump(output_json, f, indent=4)
+        
+        logger.info(f"Conversion completed successfully! Output saved to {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error converting XML to JSON: {e}")
+        return False
+
 def run_conversion():
-    xdp_file = inquirer.filepath(message="Select an XDP file to convert:").execute()
+    """Interactive conversion of a single file"""
+    file_path = inquirer.filepath(message="Select a file to convert:").execute()
     output_dir = inquirer.text(
         message=f"Enter the output directory [Default: {OUTPUT_DIR}]:",
         default=OUTPUT_DIR
     ).execute()
     
-    print("\n🛠 Converting XDP to JSON...\n")
-    python_cmd = "python3" if os.name != "nt" else "python"
-    script_path = os.path.join("src","xml_converter.py")
-    result = subprocess.run([
-        python_cmd, script_path, 
-        "-f", os.path.normpath(xdp_file), 
-        "-o", os.path.normpath(output_dir)
-    ])
+    print("\n🛠 Converting file to JSON...\n")
+    
+    # Determine file type and run appropriate conversion
+    _, ext = os.path.splitext(file_path)
+    if ext.lower() == '.xml':
+        # Use Oberon converter for XML files
+        success = convert_xml_to_json(file_path, None, None)
+    else:
+        # Use XDP converter for XDP files
+        python_cmd = "python3" if os.name != "nt" else "python"
+        script_path = os.path.join("src", "xml_converter.py")
+        result = subprocess.run([
+            python_cmd, script_path, 
+            "-f", os.path.normpath(file_path), 
+            "-o", os.path.normpath(output_dir)
+        ])
+        success = result.returncode == 0
 
     time.sleep(1)  
 
     # Check if conversion failed
-    if result.returncode != 0:
+    if not success:
         print("\n❌ Conversion failed! Please check the logs for details.\n")
         return
     
@@ -76,7 +146,7 @@ def run_conversion():
         print(f"📊 Report generated: {format_link(latest_report)}\n")
 
 def batch_process():
-    """Batch process multiple XDP files while ensuring paths are correctly formatted."""
+    """Batch process multiple files while ensuring paths are correctly formatted."""
     input_dir = inquirer.text(message=f"Enter the input directory (default: {INPUT_DIR}):", default=INPUT_DIR).execute()
     output_dir = inquirer.text(message=f"Enter the output directory (default: {OUTPUT_DIR}):", default=OUTPUT_DIR).execute()
 
@@ -89,13 +159,13 @@ def batch_process():
     # Ensure input directory exists before running batch processing
     if not os.path.isdir(input_dir):
         print(f"\n❌ Error: The input directory '{input_dir}' does not exist or is not a valid directory.")
-        print("Make sure the path is correct and contains XDP files.\n")
-        return  # ✅ Exit early if input directory is invalid
+        print("Make sure the path is correct and contains XML or XDP files.\n")
+        return
 
-    if not any(file.lower().endswith(".xdp") for file in os.listdir(input_dir)):
-        print(f"\n⚠ Warning: The input directory '{input_dir}' is empty or contains no XDP files.")
-        print("Ensure there are valid XDP files before running batch processing.\n")
-        return  # ✅ Exit early if no XDP files are found
+    if not any(file.lower().endswith((".xdp", ".xml")) for file in os.listdir(input_dir)):
+        print(f"\n⚠ Warning: The input directory '{input_dir}' is empty or contains no XML or XDP files.")
+        print("Ensure there are valid files before running batch processing.\n")
+        return
 
     # Ensure output directory exists
     if not os.path.exists(output_dir):
@@ -107,6 +177,13 @@ def batch_process():
 
     print("\n🔄 Running batch processing...\n")
 
+    # Process XML files
+    xml_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.xml')]
+    for xml_file in xml_files:
+        input_path = os.path.join(input_dir, xml_file)
+        convert_xml_to_json(input_path, None, None)
+
+    # Process XDP files
     python_cmd = "python3" if os.name != "nt" else "python"
     script_path = os.path.join("src", "xml_converter.py")
     result = subprocess.run([
@@ -114,7 +191,6 @@ def batch_process():
         "--input-dir", input_dir,
         "--output-dir", output_dir
     ], capture_output=True, text=True)
-
 
     # If batch processing failed, exit early
     if result.returncode != 0:
@@ -137,7 +213,6 @@ def batch_process():
         for file in new_reports:
             print(f"   - {format_link(os.path.join(REPORT_DIR, file))}")
 
-
 def view_reports():
     """Allow the user to select and view a specific report file."""
     report_files = get_all_reports()
@@ -155,27 +230,111 @@ def view_reports():
     with open(report_path, "r") as f:
         print(f.read())
 
-def main():
-    while True:
-        choice = inquirer.select(
-            message="📌 Select an action:",
-            choices=[
-                "🔄 Convert a Single XDP File",
-                "📂 Batch Process Multiple Files",
-                "📊 View Reports",
-                "❌ Exit"
-            ]
-        ).execute()
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Convert XML/XDP form files to JSON')
+    parser.add_argument('-i', '--input', help='Path to input file (XML or XDP)', required=False)
+    parser.add_argument('-m', '--mapping', help='Path to XML field mapping file (defaults to xml_mapping.json in project root)', required=False)
+    parser.add_argument('-o', '--output', help='Path to output JSON file (defaults to auto-generated filename in the output directory)', required=False)
+    parser.add_argument('-v', '--verbose', help='Enable verbose output', action='store_true')
+    parser.add_argument('--input-dir', help='Directory containing input files for batch processing', required=False)
+    parser.add_argument('--output-dir', help='Directory for output files during batch processing', required=False)
+    return parser.parse_args()
 
-        if choice == "🔄 Convert a Single XDP File":
-            run_conversion()
-        elif choice == "📂 Batch Process Multiple Files":
-            batch_process()
-        elif choice == "📊 View Reports":
-            view_reports()
-        elif choice == "❌ Exit":
-            print("\n👋 Exiting CLI. Goodbye!\n")
-            break
+def main():
+    """Main entry point for the CLI tool"""
+    # Parse arguments
+    args = parse_arguments()
+    
+    # Set logging level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    # If no arguments provided, run interactive mode
+    if not any([args.input, args.input_dir]):
+        while True:
+            choice = inquirer.select(
+                message="📌 Select an action:",
+                choices=[
+                    "🔄 Convert a Single File",
+                    "📂 Batch Process Multiple Files",
+                    "📊 View Reports",
+                    "❌ Exit"
+                ]
+            ).execute()
+
+            if choice == "🔄 Convert a Single File":
+                run_conversion()
+            elif choice == "📂 Batch Process Multiple Files":
+                batch_process()
+            elif choice == "📊 View Reports":
+                view_reports()
+            elif choice == "❌ Exit":
+                print("\n👋 Exiting CLI. Goodbye!\n")
+                break
+        return
+    
+    # Command line mode
+    if args.input:
+        # Single file conversion
+        input_path = os.path.abspath(args.input)
+        if not validate_input_file(input_path):
+            sys.exit(1)
+        
+        # Validate mapping file if provided
+        mapping_path = args.mapping
+        if mapping_path:
+            mapping_path = os.path.abspath(mapping_path)
+            if not validate_mapping_file(mapping_path):
+                sys.exit(1)
+        
+        # Get output path if provided
+        output_path = args.output
+        if output_path:
+            output_path = os.path.abspath(output_path)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Determine file type and run appropriate conversion
+        _, ext = os.path.splitext(input_path)
+        if ext.lower() == '.xml':
+            success = convert_xml_to_json(input_path, mapping_path, output_path)
+        else:
+            python_cmd = "python3" if os.name != "nt" else "python"
+            script_path = os.path.join("src", "xml_converter.py")
+            result = subprocess.run([
+                python_cmd, script_path,
+                "-f", input_path,
+                "-o", output_path if output_path else OUTPUT_DIR
+            ])
+            success = result.returncode == 0
+        
+        sys.exit(0 if success else 1)
+    
+    elif args.input_dir:
+        # Batch processing
+        input_dir = os.path.abspath(args.input_dir)
+        output_dir = os.path.abspath(args.output_dir) if args.output_dir else OUTPUT_DIR
+        
+        if not os.path.isdir(input_dir):
+            logger.error(f"Input directory not found: {input_dir}")
+            sys.exit(1)
+        
+        # Process XML files
+        xml_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.xml')]
+        for xml_file in xml_files:
+            input_path = os.path.join(input_dir, xml_file)
+            convert_xml_to_json(input_path, None, None)
+        
+        # Process XDP files
+        python_cmd = "python3" if os.name != "nt" else "python"
+        script_path = os.path.join("src", "xml_converter.py")
+        result = subprocess.run([
+            python_cmd, script_path,
+            "--input-dir", input_dir,
+            "--output-dir", output_dir
+        ])
+        
+        sys.exit(0 if result.returncode == 0 else 1)
 
 if __name__ == "__main__":
     main()

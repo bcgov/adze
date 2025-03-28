@@ -208,22 +208,23 @@ class XDPParser:
                 page_fields = self.process_page_fields(pageset)
                 # Add master page group if we found any fields
                 if page_fields:
-                    master_page = {
-                        "type": "group",
-                        "label": None,
-                        "id": self.next_id(),
-                        "groupId": str(self.mapping["constants"]["ministry_id"]),
-                        "repeater": False,
-                        "codeContext": {
-                            "name": None
-                        },
-                        "groupItems": [
-                            {
-                                "fields": page_fields
-                            }
-                        ]
-                    }
-                    self.all_items.append(master_page)
+
+                    # master_page = {
+                    #     "type": "group",
+                    #     "label": "Master Page",
+                    #     "id": self.next_id(),
+                    #     "groupId": str(self.mapping["constants"]["ministry_id"]),
+                    #     "repeater": False,
+                    #     "codeContext": {
+                    #         "name": "master_page"
+                    #     },
+                    #     "groupItems": [
+                    #         {
+                    #             "fields": page_fields
+                    #         }
+                    #     ]
+                    # }
+                    self.all_items.append(page_fields)
         except Exception as e:
             print(f"Error processing master pages: {e}")
     
@@ -266,7 +267,7 @@ class XDPParser:
         try:
             """Process top-level elements in the main subform"""
             # First, check for any direct field or draw elements
-            for draw in self.root_subform.findall("./template:draw", self.namespaces):
+            for draw in self.root_subform.findall(".//template:draw", self.namespaces):
                 field = self.process_draw(draw)
                 if field:
                     self.all_items.append(field)
@@ -274,6 +275,12 @@ class XDPParser:
             for field in self.root_subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in field_obj:
+                            field_obj["validation"].append(field_script)
+                        else:
+                            field_obj["validation"] = [field_script]
                     self.all_items.append(field_obj)
             
             # Then process subforms (which become groups)
@@ -316,7 +323,8 @@ class XDPParser:
                     break
                     
             if html_elem is not None and html_elem.text:
-                text_value = html_elem.text
+                # text_value = html_elem.text
+                text_value = self.extract_text_from_exdata(elem)
             
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
@@ -644,6 +652,18 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
+    def process_script(self, field):
+        # Look for script tags and process them
+        script_tags = field.findall(".//template:script", self.namespaces)
+        for script_tag in script_tags:
+            script_text = script_tag.text
+            if script_text:
+                return {
+                    "type": "javascript",
+                    "value": script_text,
+                    "errorMessage": None
+                }
+
     def process_subform(self, subform):
         try:
             """Process a subform element (adds it as a top-level group)"""
@@ -681,17 +701,19 @@ class XDPParser:
             for field in subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
-                    subform_group["groupItems"][0]["fields"].append(field_obj)
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in field_obj:
+                            field_obj["validation"].append(field_script)
+                        else:
+                            field_obj["validation"] = [field_script]
+                    self.all_items.append(field_obj)
 
             # Process draw elements (text display)
             for draw in subform.findall("./template:draw", self.namespaces):
                 draw_obj = self.process_draw(draw)
                 if draw_obj:
-                    subform_group["groupItems"][0]["fields"].append(draw_obj)
-
-            # If subform has fields, add it to top-level items
-            if subform_group["groupItems"][0]["fields"]:
-                self.all_items.append(subform_group)
+                    self.all_items.append(draw_obj)
 
             # Process nested subforms (add them at the top level, not under this subform)
             for nested_subform in subform.findall("./template:subform", self.namespaces):
@@ -732,6 +754,12 @@ class XDPParser:
                     # Make sure it's a radio button and set the group name
                     if radio_obj["type"] == "radio":
                         radio_obj["groupName"] = group_name
+                    field_script = self.process_script(field)
+                    if field_script:
+                        if "validation" in radio_obj:
+                            radio_obj["validation"].append(field_script)
+                        else:
+                            radio_obj["validation"] = [field_script]
                     fields.append(radio_obj)
             
             # If we found fields, add them to the group
@@ -747,3 +775,25 @@ class XDPParser:
                                     'group', 
                                     "Error processing exclusion group")
             return None
+    
+    def extract_text_from_exdata(self, exdata_elem):
+        # Get all text content recursively
+        all_text = []
+        
+        # Define function to extract text from element and its children
+        def extract_text(element):
+            if element.text and element.text.strip():
+                all_text.append(element.text.strip())
+            
+            for child in element:
+                extract_text(child)
+                
+            if element.tail and element.tail.strip():
+                all_text.append(element.tail.strip())
+        
+        # Start extraction with the body element directly under exdata_elem
+        for body_elem in exdata_elem.findall("body"):
+            extract_text(body_elem)
+        
+        # Join all text pieces with space
+        return " ".join(all_text)

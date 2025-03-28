@@ -1,8 +1,10 @@
 #!/bin/bash
+set -e 
 # improved_run_script.sh - Cross-platform Python dependency installer and XDP converter runner
 
 # Hard-coded requirements file
 REQUIREMENTS_FILE="requirements.txt"
+VENV_DIR=".venv"
 
 # Function to determine Python command
 get_python_command() {
@@ -21,26 +23,9 @@ get_python_command() {
     fi
 }
 
-# Function to determine pip command
-get_pip_command() {
-    if command -v pip3 &> /dev/null; then
-        echo "pip3"
-    elif command -v pip &> /dev/null; then
-        # Check if this is pip for Python 3
-        PIP_VERSION=$(pip --version 2>&1)
-        if [[ $PIP_VERSION == *"python 3"* ]] || [[ $PIP_VERSION == *"python3"* ]]; then
-            echo "pip"
-        else
-            echo ""
-        fi
-    else
-        echo ""
-    fi
-}
-
 # Get Python and pip commands
 PYTHON_CMD=$(get_python_command)
-PIP_CMD=$(get_pip_command)
+# PIP_CMD=$(get_pip_command)
 
 # Check if Python 3 is available
 if [ -z "$PYTHON_CMD" ]; then
@@ -50,102 +35,68 @@ fi
 
 echo "Using Python command: $PYTHON_CMD"
 
-# Check if requirements file exists
-if [ ! -f "$REQUIREMENTS_FILE" ]; then
-    echo "Error: Requirements file 'requirements.txt' not found."
-    echo "Please create a requirements.txt file in the current directory."
-    exit 1
-fi
-
-# Detect OS
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    echo "Detected Linux OS"
-    
-    # Check if pip is installed
-    if [ -z "$PIP_CMD" ]; then
-        echo "Installing pip for Python 3..."
-        sudo apt-get update
-        sudo apt-get install -y python3-pip
-        PIP_CMD="pip3"
-    fi
-    
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # Mac OS
-    echo "Detected macOS"
-    
-    # Check if pip is installed
-    if [ -z "$PIP_CMD" ]; then
-        echo "Installing pip for Python 3..."
-        # Check if Homebrew is installed
-        if ! command -v brew &> /dev/null; then
-            echo "Homebrew not found. Install Homebrew and then run the script again."
+# Ensure venv module is available
+if ! $PYTHON_CMD -m venv --help > /dev/null 2>&1; then
+    echo "python3-venv is not installed. Attempting to install..."
+    if command -v apt-get &> /dev/null; then
+        if command -v sudo &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y python3-venv
+        else
+            echo "Error: 'sudo' not available. Please install 'python3-venv' manually."
             exit 1
         fi
-        brew install python3
-        PIP_CMD="pip3"
-    fi
-    
-elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
-    # Windows
-    echo "Detected Windows OS"
-    
-    # Windows detection for PowerShell
-    if command -v powershell.exe &> /dev/null; then
-        # Using PowerShell
-        echo "Using PowerShell..."
-        
-        # Check for Python and pip
-        if [ -z "$PYTHON_CMD" ]; then
-            if command -v py &> /dev/null; then
-                PYTHON_CMD="py"
-                echo "Using Python Launcher (py)"
-            else
-                echo "Python 3 not found. Please install Python from https://www.python.org/downloads/"
-                echo "Make sure to check 'Add Python to PATH' during installation."
-                exit 1
-            fi
-        fi
-        
-        # Check for pip
-        if [ -z "$PIP_CMD" ]; then
-            echo "Installing pip..."
-            $PYTHON_CMD -m ensurepip --upgrade
-            PIP_CMD="$PYTHON_CMD -m pip"
-        fi
     else
-        # Fallback to regular command prompt
-        echo "Using Command Prompt..."
-        
-        if [ -z "$PIP_CMD" ]; then
-            if [ -n "$PYTHON_CMD" ]; then
-                echo "Installing pip..."
-                $PYTHON_CMD -m ensurepip --upgrade
-                PIP_CMD="$PYTHON_CMD -m pip"
-            else
-                echo "Python/pip not found. Please install Python from https://www.python.org/downloads/"
-                echo "Make sure to check 'Add Python to PATH' during installation."
-                exit 1
-            fi
-        fi
-    fi
-else
-    # Unknown OS
-    echo "Unknown operating system: $OSTYPE"
-    echo "Proceeding with detected Python/pip commands..."
-    
-    if [ -z "$PIP_CMD" ] && [ -n "$PYTHON_CMD" ]; then
-        echo "Attempting to install pip..."
-        $PYTHON_CMD -m ensurepip --upgrade
-        PIP_CMD="$PYTHON_CMD -m pip"
-    fi
-    
-    if [ -z "$PIP_CMD" ]; then
-        echo "Error: pip not found and cannot be installed automatically."
-        echo "Please install pip manually or use: $PYTHON_CMD -m pip"
+        echo "Unsupported system. Please install 'python3-venv' manually."
         exit 1
     fi
 fi
+
+# Create virtual environment if missing
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Attempting to create virtual environment..."
+    $PYTHON_CMD -m venv "$VENV_DIR" || echo "venv creation command failed"
+fi
+
+# Check if venv was created properly
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
+    echo "Virtual environment not set up correctly (missing bin/activate)."
+    echo ""
+
+    if command -v apt-get &> /dev/null; then
+        if command -v sudo &> /dev/null; then
+            echo "Attempting to install 'python3-venv' using sudo..."
+            sudo apt-get update && sudo apt-get install -y python3-venv
+        elif [ "$(id -u)" -eq 0 ]; then
+            echo "Running as root — installing 'python3-venv' directly..."
+            apt-get update && apt-get install -y python3-venv
+        else
+            echo "sudo' is not available and you're not root."
+            echo "Please install 'python3-venv' manually using:"
+            echo "   apt-get install python3-venv"
+            exit 1
+        fi
+
+        echo "Retrying virtual environment creation..."
+        $PYTHON_CMD -m venv "$VENV_DIR"
+    else
+        echo "This system does not support apt-get. Please install 'python3-venv' manually."
+        exit 1
+    fi
+
+    # Final check
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+        echo "Still failed to create virtual environment after installing python3-venv."
+        exit 1
+    fi
+fi
+
+# Activate virtualenv
+echo "Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+
+PYTHON_CMD="$VENV_DIR/bin/python"
+PIP_CMD="$VENV_DIR/bin/pip"
+
 
 # Install dependencies
 echo "Installing Python dependencies using $PIP_CMD..."

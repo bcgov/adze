@@ -1,21 +1,30 @@
-FROM python:3.12-slim AS builder
+# Use official Python 3.9 base image
+FROM python:3.9
 
-# Set a non-root user for security
-RUN addgroup --system appgroup && adduser --system --group appuser
-
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy requirements and install dependencies
+# Copy dependency list and install Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# Copy everything else into the container
 COPY . .
+COPY run_script.sh .
 
-# Change ownership of the files to the non-root user
-RUN chown -R appuser:appgroup /app
+# Ensure your run script and entrypoint are executable
+RUN chmod +x /app/run_script.sh /app/entrypoint.sh
 
-# Switch to non-root user
-USER appuser
+# Set default environment variables for input/output/report folders
+ENV INPUT_DIR=/app/data/input \
+  OUTPUT_DIR=/app/data/output \
+  REPORT_DIR=/app/data/report \
+  MODE=web \
+  FLASK_APP=webserver.py
 
-CMD ["python", "xml_converter.py", "--watch", "--input-dir", "/app/input", "--output-dir", "/app/output", "-m", "/app/xml_mapping.json"]
+
+# Create the folders if they don't exist
+RUN mkdir -p $INPUT_DIR $OUTPUT_DIR $REPORT_DIR
+
+# Use entrypoint script to switch between web and CLI mode
+CMD ["./entrypoint.sh"]
