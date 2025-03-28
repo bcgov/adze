@@ -215,9 +215,6 @@ class OberonParser:
             section_name = section.tag
             self.add_breadcrumb(section_name)
             
-            # Get section contents
-            fields = []
-            
             # Process each grid in the section
             for grid in section:
                 grid_name = grid.tag
@@ -230,13 +227,13 @@ class OberonParser:
                 if iterations:
                     # This is a repeating grid
                     for iteration in iterations:
-                        self.process_grid_iteration(iteration, fields)
+                        self.process_grid_iteration(iteration)
                 else:
                     # Regular grid with fields
                     for field_elem in grid:
                         field_obj = self.process_field(field_elem)
                         if field_obj:
-                            fields.append(field_obj)
+                            self.all_items.append(field_obj)
                 
                 self.remove_breadcrumb(grid_name)
             
@@ -253,53 +250,17 @@ class OberonParser:
                     if nested_section.tag.startswith("section-"):
                         self.process_section(nested_section)
             
-            # Create a group for the section if it has fields
-            if fields:
-                group = {
-                    "type": "group",
-                    "label": self.format_section_name(section_name),
-                    "id": self.next_id(),
-                    "groupId": self.determine_group_id(section_name),
-                    "repeater": False,
-                    "codeContext": {
-                        "name": section_name
-                    },
-                    "groupItems": [
-                        {
-                            "fields": fields
-                        }
-                    ]
-                }
-                self.all_items.append(group)
-            
             self.remove_breadcrumb(section_name)
         except Exception as e:
             print(f"Error processing section {section.tag if hasattr(section, 'tag') else 'unknown'}: {e}")
     
-    def determine_group_id(self, section_name):
-        """Determine group ID based on section name"""
-        if "child" in section_name.lower():
-            return "20"  # Child section
-        elif "parent" in section_name.lower() or "guardian" in section_name.lower():
-            return "11"  # Parent/Guardian section 
-        elif "household" in section_name.lower():
-            return "30"  # Household section
-        elif "confirmation" in section_name.lower() or "consent" in section_name.lower():
-            return "50"  # Confirmations/Consent section
-        elif "instruction" in section_name.lower():
-            return "5"   # Instructions section
-        elif "physician" in section_name.lower() or "practitioner" in section_name.lower():
-            return "40"  # Medical practitioner section
-        else:
-            return "1"   # Default group ID
-    
-    def process_grid_iteration(self, iteration, fields):
+    def process_grid_iteration(self, iteration):
         try:
             """Process a grid iteration (repeating fields)"""
             for field_elem in iteration:
                 field_obj = self.process_field(field_elem)
                 if field_obj:
-                    fields.append(field_obj)
+                    self.all_items.append(field_obj)
         except Exception as e:
             print(f"Error processing grid iteration: {e}")
     
@@ -327,6 +288,47 @@ class OberonParser:
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
+            # Process dropdown options if needed
+            if field_type == "dropdown":
+                options = self.extract_dropdown_options(field_elem)
+                if options:
+                    field_obj["listItems"] = options
+            
+            # Process checkbox value
+            if field_type == "checkbox":
+                # Check for explicit value in XML
+                value_elem = field_elem.find(".//value", self.namespaces)
+                if value_elem is not None and value_elem.text:
+                    field_obj["value"] = value_elem.text.lower() == "true"
+                else:
+                    # Default to false if no value specified
+                    field_obj["value"] = False
+            
+            # Process date validation
+            if field_type == "date":
+                # Add specific validation rules based on field name
+                if "birth" in field_name.lower():
+                    field_obj["validation"].extend([
+                        {
+                            "type": "maxDate",
+                            "value": "2024-09-01",
+                            "errorMessage": "Date should be less than September 1st 2024 due to legislation"
+                        },
+                        {
+                            "type": "minDate",
+                            "value": "2000-01-01",
+                            "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
+                        }
+                    ])
+                elif "signed" in field_name.lower():
+                    field_obj["validation"].extend([
+                        {
+                            "type": "maxDate",
+                            "value": datetime.now().strftime("%Y-%m-%d"),
+                            "errorMessage": "Date cannot be in the future"
+                        }
+                    ])
+            
             self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
@@ -341,45 +343,44 @@ class OberonParser:
             return None
     
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
-        """Determine field type based on naming conventions, attributes, and mapping"""
-        # If mapping provides a specific field type, use it
-        if mapping and mapping.get("fieldType"):
-            return mapping.get("fieldType")
-        
-        # Check for resource type fields (images, etc.)
-        if "filename" in field_attributes and "mediatype" in field_attributes:
-            return "resource"
-        
-        # Check for boolean fields
-        if field_value == "true" or field_value == "false":
-            return "checkbox"
+        """Determine the type of field based on its attributes and mapping"""
+        try:
+            # Check if field is bound to an input
+            bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
+            if bind_elem is not None:
+                # Check for select1 elements (dropdowns)
+                select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
+                if select1_elem is not None:
+                    return "dropdown"
+                
+                # Check for textarea elements
+                textarea_elem = self.root.find(f".//xf:textarea[@bind='{field_name}-bind']", self.namespaces)
+                if textarea_elem is not None:
+                    return "text-area"
+                
+                # Check for date elements
+                date_elem = self.root.find(f".//fr:date[@bind='{field_name}-bind']", self.namespaces)
+                if date_elem is not None:
+                    return "date"
+                
+                # Check for currency elements
+                currency_elem = self.root.find(f".//fr:currency[@bind='{field_name}-bind']", self.namespaces)
+                if currency_elem is not None:
+                    return "currency"
+                
+                # Check for checkbox elements
+                checkbox_elem = self.root.find(f".//xf:input[@bind='{field_name}-bind']", self.namespaces)
+                if checkbox_elem is not None and checkbox_elem.get("type") == "checkbox":
+                    return "checkbox"
             
-        # Check field name patterns
-        if field_name.endswith("-label") or "label-" in field_name:
-            return "text-info"
-        elif "-date" in field_name:
-            return "date"
-        elif "confirmation" in field_name:
-            return "checkbox"
-        elif "checklist" in field_name:
-            return "dropdown"
-        elif "dropdown" in field_name or "list" in field_name:
-            return "dropdown"
-        elif "text-area" in field_name or "description" in field_name or field_name.endswith("-needs"):
-            return "text-area"
-        elif "signature" in field_name:
-            return "signature"
-        elif "email" in field_name:
-            return "email"
-        elif "phone" in field_name:
-            return "phone"
-        elif "address" in field_name:
-            return "address"
-        elif "city" in field_name or "postcode" in field_name:
+            # Check if field is a resource
+            if field_name.startswith("control-") and field_value is None:
+                return "resource"
+            
+            # Default to text input
             return "text-input"
-        elif "name" in field_name:
-            return "text-input"
-        else:
+        except Exception as e:
+            print(f"Error determining field type for {field_name}: {e}")
             return "text-input"
     
     def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
@@ -595,4 +596,28 @@ class OberonParser:
     def format_field_name(self, field_name):
         """Format field name for display"""
         # Replace hyphens with spaces and capitalize each word
-        return " ".join(word.capitalize() for word in field_name.split("-")) 
+        return " ".join(word.capitalize() for word in field_name.split("-"))
+
+    def extract_dropdown_options(self, field_elem):
+        """Extract dropdown options from field element"""
+        try:
+            options = []
+            # Look for items in the resources instance
+            resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
+            if resources is not None:
+                # Find the field's resource section
+                field_resource = resources.find(f".//{field_elem.tag}", self.namespaces)
+                if field_resource is not None:
+                    # Look for items in the resource section
+                    for item in field_resource.findall(".//item", self.namespaces):
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text:
+                            options.append({
+                                "text": label.text.strip(),
+                                "value": value.text.strip() if value is not None and value.text else label.text.strip()
+                            })
+            return options
+        except Exception as e:
+            print(f"Error extracting dropdown options: {e}")
+            return [] 
