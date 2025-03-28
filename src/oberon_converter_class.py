@@ -24,7 +24,8 @@ class OberonParser:
                 'xh': 'http://www.w3.org/1999/xhtml',
                 'xf': 'http://www.w3.org/2002/xforms',
                 'fr': 'http://orbeon.org/oxf/xml/form-runner',
-                'fb': 'http://orbeon.org/oxf/xml/form-builder'
+                'fb': 'http://orbeon.org/oxf/xml/form-builder',
+                'xxf': 'http://orbeon.org/oxf/xml/xforms'
             }
 
             # Parse the XML file
@@ -40,6 +41,12 @@ class OberonParser:
             if self.form_data is None:
                 raise ValueError("Form data not found in Oberon XML")
 
+            # Find bind elements for additional metadata
+            self.form_binds = self.root.find(".//xf:bind[@id='fr-form-binds']", self.namespaces)
+            self.binds_map = {}
+            if self.form_binds is not None:
+                self.extract_binds(self.form_binds)
+
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
@@ -47,6 +54,39 @@ class OberonParser:
         except Exception as e:
             print(f"Error initializing OberonParser: {e}")
             raise
+    
+    def extract_binds(self, bind_element, parent_path=""):
+        """Extract bind information from the form to get metadata"""
+        try:
+            for bind in bind_element:
+                if 'id' in bind.attrib and 'ref' in bind.attrib:
+                    bind_id = bind.attrib['id']
+                    ref = bind.attrib['ref']
+                    name = bind.attrib.get('name', '')
+                    
+                    # Build path
+                    path = f"{parent_path}/{ref}" if parent_path else ref
+                    
+                    # Store bind information
+                    self.binds_map[path] = {
+                        'id': bind_id,
+                        'name': name,
+                        'attributes': {k: v for k, v in bind.attrib.items() if k not in ['id', 'ref', 'name']}
+                    }
+                    
+                    # Process nested binds
+                    self.extract_binds(bind, path)
+        except Exception as e:
+            print(f"Error extracting binds: {e}")
+    
+    def get_bind_info(self, field_name, section_path=""):
+        """Get bind information for a field"""
+        try:
+            path = f"{section_path}/{field_name}" if section_path else field_name
+            return self.binds_map.get(path)
+        except Exception as e:
+            print(f"Error getting bind info: {e}")
+            return None
     
     def load_mapping_file(self):
         try:
@@ -121,7 +161,7 @@ class OberonParser:
                 form_title = title_elem.text
             
             return {
-                "version": None,
+                "version": self.mapping["constants"]["version"],
                 "ministry_id": self.mapping["constants"]["ministry_id"],
                 "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
@@ -200,13 +240,26 @@ class OberonParser:
                 
                 self.remove_breadcrumb(grid_name)
             
+            # Check if there are nested sections (like section-child-information within section-a)
+            nested_sections = False
+            for item in section:
+                if item.tag.startswith("section-"):
+                    nested_sections = True
+                    break
+            
+            # If this section has nested sections, process them separately
+            if nested_sections:
+                for nested_section in section:
+                    if nested_section.tag.startswith("section-"):
+                        self.process_section(nested_section)
+            
             # Create a group for the section if it has fields
             if fields:
                 group = {
                     "type": "group",
                     "label": self.format_section_name(section_name),
                     "id": self.next_id(),
-                    "groupId": "1",
+                    "groupId": self.determine_group_id(section_name),
                     "repeater": False,
                     "codeContext": {
                         "name": section_name
@@ -222,6 +275,23 @@ class OberonParser:
             self.remove_breadcrumb(section_name)
         except Exception as e:
             print(f"Error processing section {section.tag if hasattr(section, 'tag') else 'unknown'}: {e}")
+    
+    def determine_group_id(self, section_name):
+        """Determine group ID based on section name"""
+        if "child" in section_name.lower():
+            return "20"  # Child section
+        elif "parent" in section_name.lower() or "guardian" in section_name.lower():
+            return "11"  # Parent/Guardian section 
+        elif "household" in section_name.lower():
+            return "30"  # Household section
+        elif "confirmation" in section_name.lower() or "consent" in section_name.lower():
+            return "50"  # Confirmations/Consent section
+        elif "instruction" in section_name.lower():
+            return "5"   # Instructions section
+        elif "physician" in section_name.lower() or "practitioner" in section_name.lower():
+            return "40"  # Medical practitioner section
+        else:
+            return "1"   # Default group ID
     
     def process_grid_iteration(self, iteration, fields):
         try:
@@ -243,149 +313,19 @@ class OberonParser:
             self.add_breadcrumb(field_name)
             current_path = self.get_breadcrumb()
             
+            # Process any attributes the field might have
+            field_attributes = {}
+            if field_elem.attrib:
+                field_attributes = {k: v for k, v in field_elem.attrib.items()}
+            
             # Find mapping for this field
             mapping = self.find_mapping_for_path(current_path)
             
             # Check if field is bound to an input
-            if mapping is None:
-                # Try to determine field type based on naming conventions
-                if field_name.endswith("-label") or "label-" in field_name:
-                    field_type = "text-info"
-                elif field_name.endswith("-date") or "date-" in field_name:
-                    field_type = "date"
-                elif field_name.endswith("-checkbox") or field_name.endswith("-confirmation"):
-                    field_type = "checkbox"
-                elif "dropdown" in field_name or "list" in field_name:
-                    field_type = "dropdown"
-                elif "text-area" in field_name:
-                    field_type = "text-area"
-                else:
-                    field_type = "text-input"
-            else:
-                field_type = mapping.get("fieldType", "text-input")
+            field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
             
             # Create the field object based on type
-            field_obj = None
-            
-            if field_type == "text-info":
-                field_obj = {
-                    "type": "text-info",
-                    "id": self.next_id(),
-                    "label": self.format_field_name(field_name),
-                    "helpText": None,
-                    "styles": None,
-                    "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "value": field_value,
-                    "helperText": None
-                }
-            elif field_type == "text-input":
-                field_obj = {
-                    "type": "text-input",
-                    "id": self.next_id(),
-                    "label": self.format_field_name(field_name),
-                    "helpText": None,
-                    "styles": None,
-                    "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "placeholder": None,
-                    "helperText": None,
-                    "inputType": "text"
-                }
-                if field_value:
-                    field_obj["value"] = field_value
-            elif field_type == "text-area":
-                field_obj = {
-                    "type": "text-area",
-                    "id": self.next_id(),
-                    "label": self.format_field_name(field_name),
-                    "helpText": None,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "placeholder": None,
-                    "helperText": None
-                }
-                if field_value:
-                    field_obj["value"] = field_value
-            elif field_type == "date":
-                # Default date validation rules
-                validation_rules = [
-                    {
-                        "type": "required",
-                        "value": True,
-                        "errorMessage": "Date should be submitted"
-                    }
-                ]
-                
-                field_obj = {
-                    "type": "date",
-                    "id": self.next_id(),
-                    "fieldId": self.next_id(),
-                    "label": self.format_field_name(field_name),
-                    "placeholder": None,
-                    "mask": "yyyy-MM-dd",
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "validation": validation_rules
-                }
-                if field_value:
-                    field_obj["value"] = field_value
-            elif field_type == "checkbox":
-                field_obj = {
-                    "type": "checkbox",
-                    "id": self.next_id(),
-                    "label": self.format_field_name(field_name),
-                    "helperText": "",
-                    "webStyles": None,
-                    "pdfStyles": None,
-                    "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "value": field_value == "true" if field_value is not None else False
-                }
-            elif field_type == "dropdown":
-                field_obj = {
-                    "id": self.next_id(),
-                    "mask": None,
-                    "size": "md",
-                    "type": "dropdown",
-                    "label": self.format_field_name(field_name),
-                    "styles": None,
-                    "isMulti": False,
-                    "helpText": None,
-                    "isInline": False,
-                    "direction": "bottom",
-                    "listItems": [],
-                    "helperText": "",
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "placeholder": "",
-                    "selectionFeedback": "top-after-reopen"
-                }
-                
-                # Add value if present
-                if field_value:
-                    field_obj["value"] = field_value
-            
-            # Apply any additional mappings
-            if mapping:
-                if mapping.get("required"):
-                    field_obj["required"] = mapping.get("required")
-                if mapping.get("validation"):
-                    field_obj["validation"] = mapping.get("validation")
-                if mapping.get("label"):
-                    field_obj["label"] = mapping.get("label")
-                if mapping.get("helpText"):
-                    field_obj["helpText"] = mapping.get("helpText")
+            field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
             self.remove_breadcrumb(field_name)
             
@@ -399,6 +339,249 @@ class OberonParser:
                                     "unknown", 
                                     "Error processing field")
             return None
+    
+    def determine_field_type(self, field_name, field_value, field_attributes, mapping):
+        """Determine field type based on naming conventions, attributes, and mapping"""
+        # If mapping provides a specific field type, use it
+        if mapping and mapping.get("fieldType"):
+            return mapping.get("fieldType")
+        
+        # Check for resource type fields (images, etc.)
+        if "filename" in field_attributes and "mediatype" in field_attributes:
+            return "resource"
+        
+        # Check for boolean fields
+        if field_value == "true" or field_value == "false":
+            return "checkbox"
+            
+        # Check field name patterns
+        if field_name.endswith("-label") or "label-" in field_name:
+            return "text-info"
+        elif "-date" in field_name:
+            return "date"
+        elif "confirmation" in field_name:
+            return "checkbox"
+        elif "checklist" in field_name:
+            return "dropdown"
+        elif "dropdown" in field_name or "list" in field_name:
+            return "dropdown"
+        elif "text-area" in field_name or "description" in field_name or field_name.endswith("-needs"):
+            return "text-area"
+        elif "signature" in field_name:
+            return "signature"
+        elif "email" in field_name:
+            return "email"
+        elif "phone" in field_name:
+            return "phone"
+        elif "address" in field_name:
+            return "address"
+        elif "city" in field_name or "postcode" in field_name:
+            return "text-input"
+        elif "name" in field_name:
+            return "text-input"
+        else:
+            return "text-input"
+    
+    def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
+        """Create field object based on field type"""
+        field_obj = None
+        
+        if field_type == "text-info":
+            field_obj = {
+                "type": "text-info",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "value": field_value,
+                "helperText": None
+            }
+        elif field_type == "text-input":
+            field_obj = {
+                "type": "text-input",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": None,
+                "helperText": None,
+                "inputType": "text"
+            }
+            if field_value:
+                field_obj["value"] = field_value
+        elif field_type == "resource":
+            field_obj = {
+                "type": "resource",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "codeContext": {
+                    "name": field_name
+                },
+                "filename": field_attributes.get("filename", ""),
+                "mediatype": field_attributes.get("mediatype", ""),
+                "size": field_attributes.get("size", ""),
+                "value": field_value
+            }
+        elif field_type == "text-area":
+            field_obj = {
+                "type": "text-area",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": None,
+                "helperText": None
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "date":
+            # Default date validation rules
+            validation_rules = [
+                {
+                    "type": "required",
+                    "value": True,
+                    "errorMessage": "Date should be submitted"
+                }
+            ]
+            
+            field_obj = {
+                "type": "date",
+                "id": self.next_id(),
+                "fieldId": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "placeholder": None,
+                "mask": "yyyy-MM-dd",
+                "codeContext": {
+                    "name": field_name
+                },
+                "validation": validation_rules
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "checkbox":
+            field_obj = {
+                "type": "checkbox",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helperText": "",
+                "webStyles": None,
+                "pdfStyles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "value": field_value == "true" if field_value is not None else False
+            }
+        elif field_type == "dropdown":
+            field_obj = {
+                "id": self.next_id(),
+                "mask": None,
+                "size": "md",
+                "type": "dropdown",
+                "label": self.format_field_name(field_name),
+                "styles": None,
+                "isMulti": False,
+                "helpText": None,
+                "isInline": False,
+                "direction": "bottom",
+                "listItems": [],
+                "helperText": "",
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": "",
+                "selectionFeedback": "top-after-reopen"
+            }
+            
+            # Add value if present
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "signature":
+            field_obj = {
+                "type": "signature",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                }
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "email":
+            field_obj = {
+                "type": "text-input",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": "example@example.com",
+                "helperText": None,
+                "inputType": "email"
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "phone":
+            field_obj = {
+                "type": "text-input",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "mask": "(###) ###-####",
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": "(123) 456-7890",
+                "helperText": None,
+                "inputType": "tel"
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        elif field_type == "address":
+            field_obj = {
+                "type": "text-area",
+                "id": self.next_id(),
+                "label": self.format_field_name(field_name),
+                "helpText": None,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": "Street address",
+                "helperText": None
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+        
+        # Apply any additional mappings
+        if mapping:
+            if mapping.get("required"):
+                field_obj["required"] = mapping.get("required")
+            if mapping.get("validation"):
+                field_obj["validation"] = mapping.get("validation")
+            if mapping.get("label"):
+                field_obj["label"] = mapping.get("label")
+            if mapping.get("helpText"):
+                field_obj["helpText"] = mapping.get("helpText")
+        
+        return field_obj
     
     def format_section_name(self, section_name):
         """Format section name for display"""
