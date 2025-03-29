@@ -315,16 +315,13 @@ class XDPParser:
             if text_elem is not None and text_elem.text:
                 text_value = text_elem.text
             
-            # Check for HTML content
-            html_elem = None
-            for elem in draw.findall(".//template:exData", self.namespaces):
-                if elem.attrib.get("contentType") == "text/html":
-                    html_elem = elem
-                    break
-                    
-            if html_elem is not None and html_elem.text:
-                # text_value = html_elem.text
-                text_value = self.extract_text_from_exdata(elem)
+            # Check for HTML content in exData
+            for exdata_elem in draw.findall(".//template:exData", self.namespaces):
+                if exdata_elem.attrib.get("contentType") == "text/html":
+                    html_text = self.extract_text_from_exdata(exdata_elem)
+                    if html_text:
+                        text_value = html_text
+                        break
             
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
@@ -766,23 +763,41 @@ class XDPParser:
             return None
     
     def extract_text_from_exdata(self, exdata_elem):
-        # Get all text content recursively
-        all_text = []
-        
-        # Define function to extract text from element and its children
-        def extract_text(element):
-            if element.text and element.text.strip():
-                all_text.append(element.text.strip())
+        try:
+            # Get all text content recursively
+            all_text = []
             
-            for child in element:
-                extract_text(child)
+            # Define function to extract text from element and its children
+            def extract_text(element):
+                if element.text and element.text.strip():
+                    all_text.append(element.text.strip())
                 
-            if element.tail and element.tail.strip():
-                all_text.append(element.tail.strip())
-        
-        # Start extraction with the body element directly under exdata_elem
-        for body_elem in exdata_elem.findall("body"):
-            extract_text(body_elem)
-        
-        # Join all text pieces with space
-        return " ".join(all_text)
+                for child in element:
+                    if '}' in child.tag:
+                        tag = child.tag.split('}')[1]
+                    else:
+                        tag = child.tag
+                        
+                    # Skip style-related tags
+                    if tag in ['style', 'xfa-spacerun']:
+                        continue
+                        
+                    extract_text(child)
+                    
+                if element.tail and element.tail.strip():
+                    all_text.append(element.tail.strip())
+            
+            # Start extraction with the body element directly under exdata_elem
+            for body_elem in exdata_elem.findall(".//{http://www.w3.org/1999/xhtml}body"):
+                extract_text(body_elem)
+            
+            # If no text was found in body, try direct text content
+            if not all_text:
+                if exdata_elem.text and exdata_elem.text.strip():
+                    all_text.append(exdata_elem.text.strip())
+            
+            # Join all text pieces with space
+            return " ".join(all_text)
+        except Exception as e:
+            print(f"Error extracting text from exData: {e}")
+            return None
