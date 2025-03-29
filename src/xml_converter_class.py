@@ -396,7 +396,7 @@ class XDPParser:
             
             ui_child = ui_children[0]
             ui_tag = ui_child.tag.split('}')[-1] if '}' in ui_child.tag else ui_child.tag
-            
+
             # Get caption/label if available
             caption_text = None
             caption_elem = field.find("./template:caption/template:value/template:text", self.namespaces)
@@ -499,32 +499,8 @@ class XDPParser:
                     date_format = format_elem.text.lower().replace("yyyy", "Y").replace("dd", "d").replace("mm", "m")
 
                 # Define validation rules
-                validation_rules = [
-                    {
-                        "type": "required",
-                        "value": True,
-                        "errorMessage": "Date of birth should be submitted"
-                    },
-                    {
-                        "type": "maxDate",
-                        "value": "2024-09-01",
-                        "errorMessage": "Date should be less than September 1st 2024 due to legislation"
-                    },
-                    {
-                        "type": "minDate",
-                        "value": "2000-01-01",
-                        "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
-                    },
-                    {
-                        "type": "javascript",
-                        "value": "{ const birthDate = new Date(value); const today = new Date();"
-                                " const age = today.getFullYear() - birthDate.getFullYear();"
-                                " const monthDiff = today.getMonth() - birthDate.getMonth();"
-                                " const dayDiff = today.getDate() - birthDate.getDate();"
-                                " if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) { age--; }"
-                                " return age >= 18; }",
-                        "errorMessage": "You must be at least 18 years old."
-                    }
+                validation_rules = [ 
+
                 ]
 
                 # Create the JSON structure for date-picker
@@ -570,11 +546,7 @@ class XDPParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "customStyle": {
-                    "printColumns": "2"
-                },
-                "placeholder": "",
-                "selectionFeedback": "top-after-reopen"
+                "placeholder": ""
             }
              # ✅ Extract visible items from `<items>` tag
                 visible_items = field.findall("./template:items/template:text", self.namespaces)
@@ -588,7 +560,6 @@ class XDPParser:
                         list_items.append({"text": item.text.strip(), "value": value.strip()})
 
                 field_obj["listItems"] = list_items
-           
             elif ui_tag == "checkButton":
                 field_obj = {
                     "type": "checkbox",
@@ -601,17 +572,16 @@ class XDPParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "databindings": {},
-                    "listItems": []  # ✅ Add listItems support
+                    "databindings": {}
                 }
 
                 
                 # ✅ Extract available checkbox options (integer values)
-                items_elem = field.findall("./template:items/template:integer", self.namespaces)
-                if items_elem:
-                    for item in items_elem:
-                        item_value = item.text.strip() if item.text else "Unknown"
-                        field_obj["listItems"].append({"text": item_value, "value": item_value})
+                #items_elem = field.findall("./template:items/template:integer", self.namespaces)
+                # if items_elem:
+                #     for item in items_elem:
+                #         item_value = item.text.strip() if item.text else "Unknown"
+                #         field_obj["listItems"].append({"text": item_value, "value": item_value})
 
                 # ✅ Extract checkbox default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
@@ -625,6 +595,25 @@ class XDPParser:
                             "source": None,  # Adjust this if needed
                             "path": binding_ref
                         }
+            elif ui_tag == "signature":
+                field_obj = {
+                    "id": self.next_id(),
+                    "mask": None,
+                    "type": "text-input",  # Overriding from "signature" to "text-input"
+                    "label": caption_text if caption_text else None,
+                    "styles": None,
+                    "helpText": help_text,
+                    "inputType": "text",
+                    "helperText": "",
+                    "codeContext": {
+                        "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
+                    },
+                    "customStyle": {
+                        "printColumns": "2"
+                    },
+                    "placeholder": ""
+                }
+
 
             # Rest of the method remains the same...
             # (Other field types like dateTimeEdit, checkButton, etc.)
