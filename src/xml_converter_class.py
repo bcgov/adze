@@ -661,7 +661,16 @@ class XDPParser:
     def process_script(self, field, event_name="initialize"):
         """Process script tags and convert Adobe JavaScript to standard JavaScript"""
         try:
+            # Look for direct script tags
             script_tags = field.findall(".//template:script", self.namespaces)
+            
+            # Also look for scripts within event tags
+            event_tags = field.findall(".//template:event", self.namespaces)
+            for event_tag in event_tags:
+                event_name = event_tag.attrib.get("activity", "initialize")
+                for script_tag in event_tag.findall(".//template:script", self.namespaces):
+                    script_tags.append((script_tag, event_name))
+            
             field_id = field.attrib.get("name", f"field_{self.id_counter}")
             
             # Check if this is a group field
@@ -673,7 +682,13 @@ class XDPParser:
                 group_id = parent.attrib.get("name", "").split('_')[0]
                 field_id = f"group_{group_id}_{field_id}"
             
-            for script_tag in script_tags:
+            for script_item in script_tags:
+                # Handle both direct script tags and event script tuples
+                if isinstance(script_item, tuple):
+                    script_tag, event_name = script_item
+                else:
+                    script_tag = script_item
+                
                 script_text = script_tag.text
                 if script_text:
                     # Convert the script
@@ -688,8 +703,16 @@ class XDPParser:
                                 "type": "visibility",
                                 "value": converted_script
                             }
-                        # Check if this is a calculated value
-                        elif "value" in converted_script:
+                        # Check if this is a docReady event
+                        elif event_name == "docReady":
+                            return {
+                                "type": "javascript",
+                                "value": converted_script,
+                                "event": "docReady",
+                                "errorMessage": None
+                            }
+                        # Check if this is a calculated value - look for direct value assignment
+                        elif "document.getElementById" in converted_script and ".value =" in converted_script:
                             return {
                                 "type": "calculatedValue",
                                 "value": converted_script
@@ -771,12 +794,8 @@ function {method_name}(fieldId) {{
             if script_result:
                 if script_result["type"] == "visibility":
                     conditions.append(script_result)
-                elif script_result["type"] == "calculatedValue":
-                    calculated_value = script_result["value"]
                 elif script_result["type"] == "javascript":
-                    if "validation" not in field_obj:
-                        field_obj["validation"] = []
-                    field_obj["validation"].append(script_result)
+                    conditions.append(script_result)
 
             # Process direct child fields in this subform (not descendants)
             for field in subform.findall("./template:field", self.namespaces):
@@ -784,7 +803,7 @@ function {method_name}(fieldId) {{
                 if field_obj:
                     # Add conditions to each field
                     if conditions:
-                        field_obj["conditions"] = conditions
+                        field_obj["conditions"].extend(conditions)
                     # Add subform name to codeContext for field identification
                     field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
                     self.all_items.append(field_obj)
@@ -795,7 +814,9 @@ function {method_name}(fieldId) {{
                 if draw_obj:
                     # Add conditions to each draw element
                     if conditions:
-                        draw_obj["conditions"] = conditions
+                        if "conditions" not in draw_obj:
+                            draw_obj["conditions"] = []
+                        draw_obj["conditions"].extend(conditions)
                     # Add subform name to codeContext for draw identification
                     draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
                     self.all_items.append(draw_obj)

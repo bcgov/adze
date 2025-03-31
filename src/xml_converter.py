@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import argparse
 import logging
 import sys
@@ -22,15 +24,13 @@ def parse_xdp_to_json(file_path, mapping_file=None):
     mapping_file = mapping_file or DEFAULT_MAPPING_FILE  # Use default if none provided
 
     if not os.path.exists(mapping_file):
-        logger.error(f"❌ Mapping file not found: {mapping_file}")
+        logger.error(f"Mapping file not found: {mapping_file}")
         sys.exit(1)
 
     try:
-        # logger.info(f"Processing file: {file_path}")
         parser = XDPParser(file_path, mapping_file)
         return parser.parse()
     except Exception as e:
-        # logger.error(f" Error processing XDP: {file_path} - {e}", exc_info=True)
         print(f"Error processing XDP: {e}")
 
 def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file: Optional[str] = None) -> bool:
@@ -44,30 +44,29 @@ def process_file(xdp_file: str, output_file: Optional[str] = None, mapping_file:
         mapping_file = mapping_file or DEFAULT_MAPPING_FILE  # Use default mapping file if not provided
 
         if not os.path.exists(xdp_file):
-            logger.error(f"❌ XDP file not found: {xdp_file}")
+            logger.error(f"XDP file not found: {xdp_file}")
             return False
         
         try:
-            logger.info(f"file_path: {xdp_file}")
+            logger.info(f"Processing file: {xdp_file}")
             # Convert the XDP to JSON
             json_data = parse_xdp_to_json(xdp_file, mapping_file)
 
             if not json_data:
-                logger.warning(f"⚠️ Conversion failed: {xdp_file} (Empty JSON)")
+                logger.warning(f"Conversion failed: {xdp_file} (Empty JSON)")
                 return False
             
             # Generate unique output filename
             output_file = generate_filename(xdp_file, "output")
-
             
             # Write the JSON output to file
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=4, ensure_ascii=False)
             
-            logger.info(f"✅ Successfully converted {xdp_file} to {output_file}")
+            logger.info(f"Successfully converted {xdp_file} to {output_file}")
             return True 
         except Exception as e:
-            logger.error(f"❌ Failed to process {xdp_file}: {e}")
+            logger.error(f"Failed to process {xdp_file}: {e}")
             return False
     
 def process_directory(input_dir: str, output_dir: str, mapping_file: Optional[str] = None) -> None:
@@ -82,7 +81,7 @@ def process_directory(input_dir: str, output_dir: str, mapping_file: Optional[st
     mapping_file = mapping_file or DEFAULT_MAPPING_FILE
 
     if not os.path.isdir(input_dir):
-        logger.error(f"❌ Input directory not found: {input_dir}")
+        logger.error(f"Input directory not found: {input_dir}")
         return
 
     if not os.path.exists(output_dir):
@@ -97,7 +96,7 @@ def process_directory(input_dir: str, output_dir: str, mapping_file: Optional[st
             process_file(input_file, output_file, mapping_file)
             files_processed += 1
 
-    logger.info(f"✅ Processed {files_processed} XDP files")
+    logger.info(f"Processed {files_processed} XDP files")
 
 def watch_directory(input_dir: str, output_dir: str, mapping_file: Optional[str] = None):
     """Watches for new XDP files and triggers process_file() when they appear."""
@@ -107,7 +106,7 @@ def watch_directory(input_dir: str, output_dir: str, mapping_file: Optional[str]
     input_dir = os.path.normpath(input_dir)
     output_dir = os.path.normpath(output_dir)
     
-    logger.info(f"📂 Watching directory: {input_dir}")
+    logger.info(f"Watching directory: {input_dir}")
 
     try:
         while True:
@@ -117,7 +116,7 @@ def watch_directory(input_dir: str, output_dir: str, mapping_file: Optional[str]
                     last_modified = os.path.getmtime(file_path)
 
                     if filename not in processed_files or processed_files[filename] != last_modified:
-                        logger.info(f"🔄 New or modified file detected: {file_path}")
+                        logger.info(f"New or modified file detected: {file_path}")
 
                         output_file = os.path.normpath(os.path.join(output_dir, filename.replace(".xdp", ".json")))
 
@@ -126,12 +125,11 @@ def watch_directory(input_dir: str, output_dir: str, mapping_file: Optional[str]
 
             time.sleep(5)
     except KeyboardInterrupt:
-        logger.info("🛑 Watch mode stopped by user.")
+        logger.info("Watch mode stopped by user.")
     except Exception as e:
-        logger.error(f"❌ Error in watch mode: {e}")
+        logger.error(f"Error in watch mode: {e}")
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description='Convert XDP to JSON.')
     parser.add_argument('-f', type=str, help='Path to the XDP file')
     parser.add_argument('-m', type=str, help='Path to the XML mapping file')
@@ -151,16 +149,16 @@ if __name__ == "__main__":
 
     # Validate arguments
     if not os.path.exists(mapping_file):
-        logger.error(f"❌ Mapping file not found: {mapping_file}")
+        logger.error(f"Mapping file not found: {mapping_file}")
         sys.exit(1)
     
     if not args.f and not args.input_dir:
-        logger.error("❌ Either --file or --input-dir must be specified")
+        logger.error("Either --file or --input-dir must be specified")
         parser.print_help()
         sys.exit(1)
     
     if args.input_dir and not args.output_dir:
-        logger.error("❌ Output directory is required when processing a directory")
+        logger.error("Output directory is required when processing a directory")
         sys.exit(1)
 
     result = None         
@@ -174,10 +172,10 @@ if __name__ == "__main__":
     else:
         result = process_file(file_path, output_file, mapping_file)
         print('result', result)
-        logger.info("XML conversion " + ("✅ successful" if result else "❌ failed"))
+        logger.info("XML conversion " + ("successful" if result else "failed"))
 
     if args.watch and args.input_dir:
-        logger.info(f"🔄 Watch mode enabled. Monitoring directory: {args.input_dir}")
-        watch_directory(args.input_dir, mapping_file)        
+        logger.info(f"Watch mode enabled. Monitoring directory: {args.input_dir}")
+        watch_directory(args.input_dir, mapping_file)
 
 
