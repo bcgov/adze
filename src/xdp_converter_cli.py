@@ -9,8 +9,13 @@ import sys
 import logging
 from datetime import datetime
 from pathlib import Path
-from filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR, generate_filename
-from oberon_converter_class import OberonParser
+
+# Add the project root to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, project_root)
+
+from src.filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR, generate_filename
+from src.oberon_converter_class import OberonParser
 import platform
 
 # Configure logging

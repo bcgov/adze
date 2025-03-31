@@ -292,6 +292,11 @@ class OberonParser:
             # Check if field is bound to an input
             field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
             
+            # Special handling for control elements with text content
+            if field_name.startswith("control-") and text_elem is not None:
+                field_type = "text-info"
+                field_value = text_elem.text
+            
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
@@ -358,7 +363,11 @@ class OberonParser:
             
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
-                # Look for text tag inside the control element
+                # First check directly in the field element
+                if field_value is not None:
+                    return "text-info"
+                
+                # Then look in the form instance
                 text_elem = self.form_instance.find(f".//form//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
