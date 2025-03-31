@@ -268,7 +268,14 @@ class OberonParser:
         try:
             """Process a field element"""
             field_name = field_elem.tag
-            field_value = field_elem.text
+            field_value = None
+            
+            # For text-info fields, look for text tag
+            text_elem = field_elem.find(".//text", self.namespaces)
+            if text_elem is not None:
+                field_value = text_elem.text
+            else:
+                field_value = field_elem.text
             
             # Track breadcrumb for mapping lookup
             self.add_breadcrumb(field_name)
@@ -345,6 +352,17 @@ class OberonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
+            # Check mapping first
+            if mapping and mapping.get("fieldType"):
+                return mapping.get("fieldType")
+            
+            # Check if field is a control with text tag
+            if field_name.startswith("control-"):
+                # Look for text tag inside the control element
+                text_elem = self.form_instance.find(f".//form//{field_name}/text", self.namespaces)
+                if text_elem is not None:
+                    return "text-info"
+            
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
             if bind_elem is not None:
@@ -384,21 +402,18 @@ class OberonParser:
                 if checkbox_instance is not None and checkbox_instance.get("type") == "checkbox":
                     return "checkbox"
             
-            # Check if field is a control with text tag
-            if field_name.startswith("control-"):
-                # Look for text tag inside the control element
-                text_elem = self.root.find(f".//{field_name}/text", self.namespaces)
-                if text_elem is not None:
-                    return "text-info"
-            
             # Check if field is a resource
             if field_name.startswith("control-") and field_value is None:
                 # Check if the resource has a text tag
-                text_elem = self.root.find(f".//{field_name}/text", self.namespaces)
+                text_elem = self.form_instance.find(f".//form//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
                 # If no text tag, treat as text-input
                 return "text-input"
+            
+            # Check for date fields by name
+            if any(date_indicator in field_name.lower() for date_indicator in ['date', 'birth', 'signed']):
+                return "date"
             
             # Check for phone number fields
             if any(phone_indicator in field_name.lower() for phone_indicator in ['phone', 'tel', 'mobile', 'cell']):
