@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xh:html xmlns:xh="http://www.w3.org/1999/xhtml"
+         xmlns:xf="http://www.w3.org/2002/xforms"
+         xmlns:fr="http://orbeon.org/oxf/xml/form-runner"
+         xmlns:fb="http://orbeon.org/oxf/xml/form-builder"
+         xmlns:xxf="http://orbeon.org/oxf/xml/xforms">
+    <xh:head>
+        <xh:title>Test Form</xh:title>
+    </xh:head>
+    <xh:body>
+        <xf:model id="fr-form-model">
+            <xf:instance id="fr-form-instance">
+                <form>
+                    <section-a>
+                        <grid-1>
+                            <control-476>
+                                <text>This is a text info field</text>
+                            </control-476>
+                            <text-input-field>Sample text input</text-input-field>
+                            <date-field>2024-03-30</date-field>
+                            <email-field>test@example.com</email-field>
+                            <phone-field>(123) 456-7890</phone-field>
+                            <checkbox-field>true</checkbox-field>
+                            <radio-group>
+                                <option value="1">Option 1</option>
+                                <option value="2">Option 2</option>
+                            </radio-group>
+                            <dropdown-field>2</dropdown-field>
+                        </grid-1>
+                    </section-a>
+                </form>
+            </xf:instance>
+            <xf:bind id="fr-form-binds">
+                <xf:bind ref="text-input-field" name="Text Input Field" required="true()"/>
+                <xf:bind ref="date-field" name="Date Field" type="date"/>
+                <xf:bind ref="email-field" name="Email Field" type="email"/>
+                <xf:bind ref="phone-field" name="Phone Field" type="tel"/>
+                <xf:bind ref="checkbox-field" name="Checkbox Field" type="boolean"/>
+                <xf:bind ref="radio-group" name="Radio Group" required="true()"/>
+                <xf:bind ref="dropdown-field" name="Dropdown Field" required="true()"/>
+            </xf:bind>
+        </xf:model>
+    </xh:body>
+</xh:html> 
