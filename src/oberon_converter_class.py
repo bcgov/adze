@@ -47,6 +47,11 @@ class OberonParser:
             if self.form_binds is not None:
                 self.extract_binds(self.form_binds)
 
+            # Get form resources for labels
+            self.form_resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
+            if self.form_resources is None:
+                raise ValueError("Form resources not found in Oberon XML")
+
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
@@ -480,15 +485,20 @@ class OberonParser:
                     "errorMessage": bind_attrs.get('xxf:max-message', f"Value must be at most {bind_attrs['max']}")
                 })
         
-        # Get label from bind info or use formatted field name
-        label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
+        # Get label and hint from form resources
+        label = self.get_field_label(field_name)
+        hint = self.get_field_hint(field_name)
+        
+        # Fallback to bind info or formatted field name if no label found
+        if not label:
+            label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
         
         if field_type == "text-info":
             field_obj = {
                 "type": "text-info",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -502,7 +512,7 @@ class OberonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -521,7 +531,7 @@ class OberonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -539,6 +549,7 @@ class OberonParser:
                 "id": self.next_id(),
                 "fieldId": self.next_id(),
                 "label": label,
+                "helpText": hint,
                 "placeholder": None,
                 "mask": "yyyy-MM-dd",
                 "codeContext": {
@@ -553,6 +564,7 @@ class OberonParser:
                 "type": "checkbox",
                 "id": self.next_id(),
                 "label": label,
+                "helpText": hint,
                 "helperText": "",
                 "webStyles": None,
                 "pdfStyles": None,
@@ -569,7 +581,7 @@ class OberonParser:
                 "type": "radio",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -589,9 +601,9 @@ class OberonParser:
                 "size": "md",
                 "type": "dropdown",
                 "label": label,
+                "helpText": hint,
                 "styles": None,
                 "isMulti": False,
-                "helpText": None,
                 "isInline": False,
                 "direction": "bottom",
                 "listItems": [],
@@ -611,7 +623,7 @@ class OberonParser:
                 "type": "signature",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -626,7 +638,7 @@ class OberonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -645,7 +657,7 @@ class OberonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "mask": "(###) ###-####",
                 "codeContext": {
@@ -664,7 +676,7 @@ class OberonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": None,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -730,4 +742,38 @@ class OberonParser:
             return options
         except Exception as e:
             print(f"Error extracting dropdown options: {e}")
-            return [] 
+            return []
+
+    def get_field_label(self, field_name):
+        """Extract label from form resources"""
+        try:
+            # Find the field's resource section
+            field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
+            if field_resource is not None:
+                # Look for label element
+                label_elem = field_resource.find("label", self.namespaces)
+                if label_elem is not None and label_elem.text:
+                    # If label contains HTML, extract text content
+                    if "<div>" in label_elem.text:
+                        # Remove HTML tags and get text content
+                        import re
+                        text = re.sub('<[^<]+?>', '', label_elem.text)
+                        return text.strip()
+                    return label_elem.text.strip()
+            return None
+        except Exception as e:
+            print(f"Error getting field label for {field_name}: {e}")
+            return None
+
+    def get_field_hint(self, field_name):
+        """Extract hint from form resources"""
+        try:
+            field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
+            if field_resource is not None:
+                hint_elem = field_resource.find("hint", self.namespaces)
+                if hint_elem is not None and hint_elem.text:
+                    return hint_elem.text.strip()
+            return None
+        except Exception as e:
+            print(f"Error getting field hint for {field_name}: {e}")
+            return None 
