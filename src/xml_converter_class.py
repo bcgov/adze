@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from .report import Report
+from report import Report
 
 class XDPParser:
     def __init__(self, xml_filename, mapping_file=None):
@@ -21,6 +21,7 @@ class XDPParser:
             self.id_counter = 1
             self.mapping = self.load_mapping_file()
             self.namespaces = None
+            self.javascript_section = {}  # Store JavaScript methods
 
             # Parse the XML file
             self.tree = ET.parse(xml_filename)
@@ -155,7 +156,9 @@ class XDPParser:
                 "title": None,
                 "form_id": form_id,
                 "deployed_to": None,
-                "dataSources": []
+                "dataSources": [],
+                "javascript": self.javascript_section,  # Add JavaScript section
+                "data": {"items": []}  # Initialize empty items array
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
@@ -167,7 +170,9 @@ class XDPParser:
                 "title": None,
                 "form_id": "FORM0001",
                 "deployed_to": None,
-                "dataSources": []
+                "dataSources": [],
+                "javascript": self.javascript_section,  # Add JavaScript section
+                "data": {"items": []}  # Initialize empty items array
             }
     
     def parse(self):
@@ -177,6 +182,9 @@ class XDPParser:
                 print("Root subform not found")
                 return None
                 
+            # Process global scripts first
+            self.process_global_scripts()
+            
             # Process all sections
             self.process_master_pages()
             self.process_root_elements()
@@ -184,14 +192,11 @@ class XDPParser:
             # Add items to output JSON
             self.output_json["data"] = {"items": self.all_items}
             
-            # # Write output
-            # output_file = 'mapping_output.json'
-            # with open(output_file, 'w') as json_file:
-            #     json.dump(self.output_json, json_file, indent=4)
-                
-            # print(f"JSON output saved to {output_file}")
+            # Ensure JavaScript section is properly formatted
+            if not self.javascript_section:
+                self.javascript_section = {}
             
-            # Once all fields are processed, save the report (instead of saving after every field)
+            # Once all fields are processed, save the report
             self.Report.save_report()
             return self.output_json
         except Exception as e:
@@ -204,27 +209,32 @@ class XDPParser:
             pagesets = self.root.findall(".//template:pageSet", self.namespaces)
             
             for pageset in pagesets:
-                
-                page_fields = self.process_page_fields(pageset)
-                # Add master page group if we found any fields
-                if page_fields:
-
-                    # master_page = {
-                    #     "type": "group",
-                    #     "label": "Master Page",
-                    #     "id": self.next_id(),
-                    #     "groupId": str(self.mapping["constants"]["ministry_id"]),
-                    #     "repeater": False,
-                    #     "codeContext": {
-                    #         "name": "master_page"
-                    #     },
-                    #     "groupItems": [
-                    #         {
-                    #             "fields": page_fields
-                    #         }
-                    #     ]
-                    # }
-                    self.all_items.append(page_fields)
+                # Find text elements in pageSet for header/footer info
+                for draw in pageset.findall(".//template:draw", self.namespaces):
+                    draw_name = draw.attrib.get("name", "generic_text_display")
+                    
+                    # Get the text value if available
+                    text_value = None
+                    text_elem = draw.find(".//template:text", self.namespaces)
+                    if text_elem is not None and text_elem.text:
+                        text_value = text_elem.text
+                    
+                    # Create text-info field
+                    text_field = {
+                        "type": "text-info",
+                        "id": self.next_id(),
+                        "label": None,
+                        "helpText": None,
+                        "styles": None,
+                        "mask": None,
+                        "codeContext": {
+                            "name": None
+                        },
+                        "value": text_value,
+                        "helperText": None
+                    }
+                    self.all_items.append(text_field)
+                    self.Report.report_success(draw_name, 'text-info', text_value)
         except Exception as e:
             print(f"Error processing master pages: {e}")
     
@@ -425,6 +435,7 @@ class XDPParser:
                 if mapping.get("helpText"):
                     help_text = mapping.get("helpText")
             
+            # Create field object based on UI type
             if ui_tag == "textEdit":
                 field_obj = {
                     "type": field_type or "text-input",
@@ -438,7 +449,8 @@ class XDPParser:
                     },
                     "placeholder": None,
                     "helperText": None,
-                    "inputType": "text"
+                    "inputType": "text",
+                    "conditions": []
                 }
                 
                 # Check for special field types based on field name if no mapping found
@@ -479,7 +491,8 @@ class XDPParser:
                         "name": None
                     },
                     "value": None,
-                    "inputType": "number"
+                    "inputType": "number",
+                    "conditions": []
                 }
                 
                 if binding_ref:
@@ -488,19 +501,14 @@ class XDPParser:
                     # Apply any dataSource mappings
                     if mapping and mapping.get("dataSource"):
                         field_obj["databindings"]["source"] = mapping.get("dataSource")
+            
             elif ui_tag == "dateTimeEdit":
-            # Extract the date format if available
+                # Extract the date format if available
                 date_format = "yyyy-MM-dd"  # Default format
                 format_elem = field.find("./template:format/template:picture", self.namespaces)
                 if format_elem is not None and format_elem.text:
                     date_format = format_elem.text.lower().replace("yyyy", "Y").replace("dd", "d").replace("mm", "m")
 
-                # Define validation rules
-                validation_rules = [ 
-
-                ]
-
-                # Create the JSON structure for date-picker
                 field_obj = {
                     "type": "date",
                     "label": caption_text,
@@ -512,8 +520,9 @@ class XDPParser:
                     "label": caption_text,
                     "placeholder": None,
                     "mask": date_format,
-                    "validation": validation_rules
+                    "conditions": []
                 }
+            
             elif ui_tag == "button":
                 field_obj = {
                     "type": "button",
@@ -524,32 +533,36 @@ class XDPParser:
                     "codeContext": {
                         "name": None
                     },
-                    "buttonType": "submit"
+                    "buttonType": "submit",
+                    "conditions": []
                 }
+            
             elif ui_tag == "choiceList":
                 field_obj = {
-                "id": self.next_id(),
-                "mask": None,
-                "size": "md",
-                "type": "dropdown",
-                "label": caption_text if caption_text else "Dropdown",
-                "styles": None,
-                "isMulti": False,
-                "helpText": None,
-                "isInline": False,
-                "direction": "bottom",
-                "listItems": [],  # List of dropdown options
-                "helperText": "",
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": ""
-            }
-             # ✅ Extract visible items from `<items>` tag
+                    "id": self.next_id(),
+                    "mask": None,
+                    "size": "md",
+                    "type": "dropdown",
+                    "label": caption_text if caption_text else "Dropdown",
+                    "styles": None,
+                    "isMulti": False,
+                    "helpText": None,
+                    "isInline": False,
+                    "direction": "bottom",
+                    "listItems": [],  # List of dropdown options
+                    "helperText": "",
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "placeholder": "",
+                    "conditions": []
+                }
+                
+                # Extract visible items from `<items>` tag
                 visible_items = field.findall("./template:items/template:text", self.namespaces)
                 saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
 
-                # 🛠️ Ensure correct mapping of labels and values
+                # Ensure correct mapping of labels and values
                 list_items = []
                 for index, item in enumerate(visible_items):
                     value = saved_values[index].text if index < len(saved_values) else item.text
@@ -557,6 +570,7 @@ class XDPParser:
                         list_items.append({"text": item.text.strip(), "value": value.strip()})
 
                 field_obj["listItems"] = list_items
+            
             elif ui_tag == "checkButton":
                 field_obj = {
                     "type": "checkbox",
@@ -569,22 +583,15 @@ class XDPParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "databindings": {}
+                    "databindings": {},
+                    "conditions": []
                 }
 
-                
-                # ✅ Extract available checkbox options (integer values)
-                #items_elem = field.findall("./template:items/template:integer", self.namespaces)
-                # if items_elem:
-                #     for item in items_elem:
-                #         item_value = item.text.strip() if item.text else "Unknown"
-                #         field_obj["listItems"].append({"text": item_value, "value": item_value})
-
-                # ✅ Extract checkbox default value (1 = checked, 0 = unchecked)
+                # Extract checkbox default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
                 if value_elem is not None:
                     field_obj["value"] = value_elem.text.strip() == "1"
-                    # ✅ Assign Data Bindings (source & path)
+                    # Assign Data Bindings (source & path)
                     binding_elem = field.find("./template:bind", self.namespaces)
                     if binding_elem is not None and 'ref' in binding_elem.attrib:
                         binding_ref = binding_elem.attrib['ref']
@@ -592,6 +599,7 @@ class XDPParser:
                             "source": None,  # Adjust this if needed
                             "path": binding_ref
                         }
+            
             elif ui_tag == "signature":
                 field_obj = {
                     "id": self.next_id(),
@@ -608,13 +616,23 @@ class XDPParser:
                     "customStyle": {
                         "printColumns": "2"
                     },
-                    "placeholder": ""
+                    "placeholder": "",
+                    "conditions": []
                 }
 
+            # Process any scripts and get conditions after field_obj is created
+            if field_obj:
+                script_result = self.process_script(field)
+                if script_result:
+                    if script_result["type"] == "visibility":
+                        field_obj["conditions"].append(script_result)
+                    elif script_result["type"] == "calculatedValue":
+                        field_obj["calculatedValue"] = script_result["value"]
+                    elif script_result["type"] == "javascript":
+                        if "validation" not in field_obj:
+                            field_obj["validation"] = []
+                        field_obj["validation"].append(script_result)
 
-            # Rest of the method remains the same...
-            # (Other field types like dateTimeEdit, checkButton, etc.)
-            
             self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
@@ -625,7 +643,9 @@ class XDPParser:
                     if mapping.get("required"):
                         field_obj["required"] = mapping.get("required")
                     if mapping.get("validation"):
-                        field_obj["validation"] = mapping.get("validation")
+                        if "validation" not in field_obj:
+                            field_obj["validation"] = []
+                        field_obj["validation"].extend(mapping.get("validation", []))
             else:
                 self.Report.report_error(field_name, 'text-info', field_name, "Error processing field element")
                 
@@ -638,127 +658,193 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
-    def process_script(self, field):
-        # Look for script tags and process them
-        script_tags = field.findall(".//template:script", self.namespaces)
-        for script_tag in script_tags:
-            script_text = script_tag.text
-            if script_text:
-                return {
-                    "type": "javascript",
-                    "value": script_text,
-                    "errorMessage": None
-                }
+    def process_script(self, field, event_name="initialize"):
+        """Process script tags and convert Adobe JavaScript to standard JavaScript"""
+        try:
+            script_tags = field.findall(".//template:script", self.namespaces)
+            field_id = field.attrib.get("name", f"field_{self.id_counter}")
+            
+            # Check if this is a group field
+            is_group_field = False
+            group_id = None
+            parent = field.getparent() if hasattr(field, 'getparent') else None
+            if parent is not None and 'subform' in parent.tag:
+                is_group_field = True
+                group_id = parent.attrib.get("name", "").split('_')[0]
+                field_id = f"group_{group_id}_{field_id}"
+            
+            for script_tag in script_tags:
+                script_text = script_tag.text
+                if script_text:
+                    # Convert the script
+                    converted_script = self.convert_adobe_script(script_text, field_id, event_name)
+                    if converted_script:
+                        # Add to JavaScript section
+                        self.javascript_section[field_id] = converted_script
+                        
+                        # Check if this is a visibility condition
+                        if "style.display" in converted_script:
+                            return {
+                                "type": "visibility",
+                                "value": converted_script
+                            }
+                        # Check if this is a calculated value
+                        elif "value" in converted_script:
+                            return {
+                                "type": "calculatedValue",
+                                "value": converted_script
+                            }
+                        else:
+                            return {
+                                "type": "javascript",
+                                "value": converted_script,
+                                "errorMessage": None
+                            }
+            return None
+        except Exception as e:
+            print(f"Error processing script: {e}")
+            return None
+
+    def convert_adobe_script(self, script_text, field_id, event_name, is_global=False):
+        """Convert Adobe-specific JavaScript to standard JavaScript"""
+        try:
+            # Create method name based on field ID and event
+            method_name = f"global_{event_name}" if is_global else f"{field_id}_{event_name}"
+            
+            # Replace Adobe-specific terms
+            script = script_text.replace("this.rawValue", "document.getElementById('" + field_id + "').value")
+            script = script.replace(".presence = 'hidden'", ".style.display = 'none'")
+            script = script.replace(".presence = 'visible'", ".style.display = 'block'")
+            
+            # Handle field references
+            # Replace direct field references with document.getElementById calls
+            import re
+            field_refs = re.findall(r'(\w+)\.', script)
+            for ref in field_refs:
+                if ref != 'document':
+                    # Check if this is a group field reference
+                    if ref.startswith('group_'):
+                        # Handle group field reference
+                        group_id = ref.split('_')[1]
+                        script = script.replace(f"{ref}.", f"groupStates['{group_id}']?.[0]?.['{group_id}-0-{ref}'].")
+                    else:
+                        # Handle regular field reference
+                        script = script.replace(f"{ref}.", f"formStates['{ref}']")
+            
+            # Create the JavaScript method
+            js_method = f"""
+function {method_name}(fieldId) {{
+    const field = document.getElementById(fieldId);
+    {script}
+}}
+"""
+            return js_method
+        except Exception as e:
+            print(f"Error converting Adobe script: {e}")
+            return None
+
+    def process_global_scripts(self):
+        """Process global scripts in the root subform"""
+        try:
+            # Look for script tags in the root subform
+            script_tags = self.root_subform.findall(".//template:script", self.namespaces)
+            
+            for script_tag in script_tags:
+                script_text = script_tag.text
+                if script_text:
+                    # Convert the script as a global script
+                    converted_script = self.convert_adobe_script(script_text, "global", "initialize", True)
+                    if converted_script:
+                        # Add to JavaScript section
+                        self.javascript_section["global"] = converted_script
+        except Exception as e:
+            print(f"Error processing global scripts: {e}")
 
     def process_subform(self, subform):
         try:
-            """Process a subform element (adds it as a top-level group)"""
-            subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
+            """Process a subform element"""
+            subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
+            
+            # Process any scripts and get conditions
+            conditions = []
+            script_result = self.process_script(subform)
+            if script_result:
+                if script_result["type"] == "visibility":
+                    conditions.append(script_result)
+                elif script_result["type"] == "calculatedValue":
+                    calculated_value = script_result["value"]
+                elif script_result["type"] == "javascript":
+                    if "validation" not in field_obj:
+                        field_obj["validation"] = []
+                    field_obj["validation"].append(script_result)
 
-            # Check if this is a repeating subform
-            has_occur = subform.find("./template:occur", self.namespaces) is not None
-
-            # Determine group ID based on name
-            group_id = "1"  # Default
-            if "contact" in subform_name.lower():
-                group_id = "11"
-            elif "submit" in subform_name.lower():
-                group_id = "6"
-
-            # Group label - Capitalize words and add spaces
-            label = " ".join(word.capitalize() for word in subform_name.split("_"))
-            if has_occur:
-                label = f"Table - {label}"
-
-            # Create group for this subform
-            subform_group = {
-                "type": "group",
-                "label": label,
-                "id": self.next_id(),
-                "groupId": group_id,
-                "repeater": has_occur,
-                "codeContext": {
-                    "name": None
-                },
-                "groupItems": [{"fields": []}]
-            }
-
-            # Process fields in this subform
+            # Process direct child fields in this subform (not descendants)
             for field in subform.findall("./template:field", self.namespaces):
                 field_obj = self.process_field(field)
                 if field_obj:
-                    field_script = self.process_script(field)
-                    if field_script:
-                        if "validation" in field_obj:
-                            field_obj["validation"].append(field_script)
-                        else:
-                            field_obj["validation"] = [field_script]
+                    # Add conditions to each field
+                    if conditions:
+                        field_obj["conditions"] = conditions
+                    # Add subform name to codeContext for field identification
+                    field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
                     self.all_items.append(field_obj)
 
-            # Process draw elements (text display)
+            # Process direct child draw elements (not descendants)
             for draw in subform.findall("./template:draw", self.namespaces):
                 draw_obj = self.process_draw(draw)
                 if draw_obj:
+                    # Add conditions to each draw element
+                    if conditions:
+                        draw_obj["conditions"] = conditions
+                    # Add subform name to codeContext for draw identification
+                    draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
                     self.all_items.append(draw_obj)
 
-            # Process nested subforms (add them at the top level, not under this subform)
+            # Process direct child subforms (not descendants)
             for nested_subform in subform.findall("./template:subform", self.namespaces):
                 self.process_subform(nested_subform)
 
+            return None  # No longer returning a group object
         except Exception as e:
             print(f"Error processing subform: {e}")
-
-
+            return None
 
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
             
-            # Create group for this exclusion group
-            group_obj = {
-                "type": "group",
-                "label": group_name,
-                "id": self.next_id(),
-                "groupId": "1",
-                "repeater": False,
-                "codeContext": {
-                    "name": None
-                },
-                "groupItems": [
-                    {
-                        "fields": []
-                    }
-                ]
-            }
+            # Process any scripts and get conditions
+            conditions = []
+            script_result = self.process_script(exclgroup)
+            if script_result:
+                if script_result["type"] == "visibility":
+                    conditions.append(script_result)
+                elif script_result["type"] == "calculatedValue":
+                    calculated_value = script_result["value"]
+                elif script_result["type"] == "javascript":
+                    if "validation" not in field_obj:
+                        field_obj["validation"] = []
+                    field_obj["validation"].append(script_result)
             
             # Process fields (usually radio buttons) in this group
-            fields = []
             for field in exclgroup.findall("./template:field", self.namespaces):
                 radio_obj = self.process_field(field)
                 if radio_obj:
                     # Make sure it's a radio button and set the group name
                     if radio_obj["type"] == "radio":
                         radio_obj["groupName"] = group_name
-                    field_script = self.process_script(field)
-                    if field_script:
-                        if "validation" in radio_obj:
-                            radio_obj["validation"].append(field_script)
-                        else:
-                            radio_obj["validation"] = [field_script]
-                    fields.append(radio_obj)
+                        # Add conditions to each radio button
+                        if conditions:
+                            radio_obj["conditions"] = conditions
+                        self.all_items.append(radio_obj)
+                        self.Report.report_success(group_name, 'radio', "Radio Button")
             
-            # If we found fields, add them to the group
-            if fields:
-                group_obj["groupItems"][0]["fields"] = fields
-                self.Report.report_success(group_name, 'group', "Exclusion Group")
-                return group_obj
-            
-            return None
+            return None  # No longer returning a group object
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
             self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
-                                    'group', 
+                                    'radio', 
                                     "Error processing exclusion group")
             return None
     
