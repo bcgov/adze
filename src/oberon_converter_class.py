@@ -403,6 +403,11 @@ class OberonParser:
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
             if bind_elem is not None:
+                # Check for checkbox-input elements first
+                checkbox_input_elem = self.root.find(f".//fr:checkbox-input[@bind='{field_name}-bind']", self.namespaces)
+                if checkbox_input_elem is not None:
+                    return "checkbox"
+                
                 # Check for select1 elements (dropdowns or radio buttons)
                 select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
                 if select1_elem is not None:
