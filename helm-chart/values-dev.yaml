@@ -80,7 +80,7 @@ ingress:
   hosts:
     - host: adze-dev-c79ac4-dev.apps.silver.devops.gov.bc.ca
       paths:
-        - path: /upload-form
+        - path: /
           pathType: Prefix
   tls:
     - {}

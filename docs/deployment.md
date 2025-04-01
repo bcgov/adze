@@ -39,10 +39,11 @@ ADZE/
 
 ### Environments
 
-| Environment | Namespace     | Description                                  |
-| ----------- | ------------- | -------------------------------------------- |
-| Dev         | `c79ac4-dev`  | Active development environment on OpenShift  |
-| Prod        | `c79ac4-prod` | Reserved for stable releases (manual deploy) |
+| Environment | Namespace     | Description                       |
+| ----------- | ------------- | --------------------------------- |
+| Dev         | `c79ac4-dev`  | Active development, test features |
+| test        | `c79ac4-test` | Integration & pre-prod testing    |
+| Prod        | `c79ac4-prod` | Stable production deployments     |
 
 ---
 

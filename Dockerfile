@@ -10,10 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy everything else into the container
 COPY . .
-COPY run_script.sh .
 
 # Ensure your run script and entrypoint are executable
-RUN chmod +x /app/run_script.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set default environment variables for input/output/report folders
 ENV INPUT_DIR=/app/data/input \
