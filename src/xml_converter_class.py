@@ -321,17 +321,20 @@ class XDPParser:
             
             # Get text content if available
             text_value = None
-            text_elem = draw.find(".//template:text", self.namespaces)
-            if text_elem is not None and text_elem.text:
-                text_value = text_elem.text
             
-            # Check for HTML content in exData
-            for exdata_elem in draw.findall(".//template:exData", self.namespaces):
-                if exdata_elem.attrib.get("contentType") == "text/html":
-                    html_text = self.extract_text_from_exdata(exdata_elem)
-                    if html_text:
-                        text_value = html_text
-                        break
+            # First check for direct text value in value/text element
+            value_elem = draw.find(".//template:value/template:text", self.namespaces)
+            if value_elem is not None and value_elem.text:
+                text_value = value_elem.text
+            
+            # Then check for text in exData
+            if not text_value:
+                for exdata_elem in draw.findall(".//template:exData", self.namespaces):
+                    if exdata_elem.attrib.get("contentType") == "text/html":
+                        html_text = self.extract_text_from_exdata(exdata_elem)
+                        if html_text:
+                            text_value = html_text
+                            break
             
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
@@ -343,21 +346,41 @@ class XDPParser:
                 text_lower = text_value.lower()
                 if "personal information" in text_lower or "freedom of information" in text_lower:
                     field_type = "foi_statement"
+                # Check if this should be a text input based on field name or text content
+                elif any(indicator in draw_name.lower() for indicator in ["file", "program", "document", "reference", "number"]):
+                    field_type = "text-input"
             
-            # Create text-info field
-            field_obj = {
-                "type": "text-info",
-                "id": self.next_id(),
-                "label": mapping.get("label") if mapping else None,
-                "helpText": mapping.get("helpText") if mapping else None,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": None
-                },
-                "value": text_value,
-                "helperText": None
-            }
+            # Create field object based on type
+            if field_type == "text-input":
+                field_obj = {
+                    "type": "text-input",
+                    "id": self.next_id(),
+                    "label": mapping.get("label") if mapping else None,
+                    "helpText": mapping.get("helpText") if mapping else None,
+                    "styles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": None
+                    },
+                    "placeholder": None,
+                    "helperText": None,
+                    "inputType": "text"
+                }
+            else:
+                # Create text-info field
+                field_obj = {
+                    "type": "text-info",
+                    "id": self.next_id(),
+                    "label": mapping.get("label") if mapping else None,
+                    "helpText": mapping.get("helpText") if mapping else None,
+                    "styles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": None
+                    },
+                    "value": text_value,  # Now properly set from value/text element
+                    "helperText": None
+                }
             
             # Apply any additional mapping properties
             if mapping:
@@ -788,6 +811,10 @@ function {method_name}(fieldId) {{
             """Process a subform element"""
             subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
             
+            # Check if this is a repeating group (has occur element)
+            occur_elem = subform.find("./template:occur", self.namespaces)
+            is_repeating = occur_elem is not None
+            
             # Process any scripts and get conditions
             conditions = []
             script_result = self.process_script(subform)
@@ -797,35 +824,98 @@ function {method_name}(fieldId) {{
                 elif script_result["type"] == "javascript":
                     conditions.append(script_result)
 
-            # Process direct child fields in this subform (not descendants)
-            for field in subform.findall("./template:field", self.namespaces):
-                field_obj = self.process_field(field)
-                if field_obj:
-                    # Add conditions to each field
-                    if conditions:
-                        field_obj["conditions"].extend(conditions)
-                    # Add subform name to codeContext for field identification
-                    field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                    self.all_items.append(field_obj)
+            # Create group object if this is a repeating group
+            if is_repeating:
+                group_obj = {
+                    "type": "group",
+                    "id": self.next_id(),
+                    "label": None,
+                    "helpText": None,
+                    "styles": None,
+                    "codeContext": {
+                        "name": subform_name
+                    },
+                    "repeater": True,
+                    "conditions": conditions,
+                    "items": []
+                }
+                
+                # Process direct child fields in this subform (not descendants)
+                for field in subform.findall("./template:field", self.namespaces):
+                    field_obj = self.process_field(field)
+                    if field_obj:
+                        # Add conditions to each field
+                        if conditions:
+                            field_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for field identification
+                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                        group_obj["items"].append(field_obj)
 
-            # Process direct child draw elements (not descendants)
-            for draw in subform.findall("./template:draw", self.namespaces):
-                draw_obj = self.process_draw(draw)
-                if draw_obj:
-                    # Add conditions to each draw element
-                    if conditions:
-                        if "conditions" not in draw_obj:
-                            draw_obj["conditions"] = []
-                        draw_obj["conditions"].extend(conditions)
-                    # Add subform name to codeContext for draw identification
-                    draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                    self.all_items.append(draw_obj)
+                # Process direct child draw elements (not descendants)
+                for draw in subform.findall("./template:draw", self.namespaces):
+                    draw_obj = self.process_draw(draw)
+                    if draw_obj:
+                        # Add conditions to each draw element
+                        if conditions:
+                            if "conditions" not in draw_obj:
+                                draw_obj["conditions"] = []
+                            draw_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for draw identification
+                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                        group_obj["items"].append(draw_obj)
 
-            # Process direct child subforms (not descendants)
-            for nested_subform in subform.findall("./template:subform", self.namespaces):
-                self.process_subform(nested_subform)
+                # Process direct child subforms (not descendants)
+                for nested_subform in subform.findall("./template:subform", self.namespaces):
+                    nested_group = self.process_subform(nested_subform)
+                    if nested_group:
+                        # Add conditions to nested group if they exist
+                        if conditions:
+                            if "conditions" not in nested_group:
+                                nested_group["conditions"] = []
+                            nested_group["conditions"].extend(conditions)
+                        group_obj["items"].append(nested_group)
 
-            return None  # No longer returning a group object
+                # Add the group to all_items and return it
+                self.all_items.append(group_obj)
+                return group_obj
+            else:
+                # Process non-repeating subform fields directly
+                for field in subform.findall("./template:field", self.namespaces):
+                    field_obj = self.process_field(field)
+                    if field_obj:
+                        # Add conditions to each field
+                        if conditions:
+                            field_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for field identification
+                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                        self.all_items.append(field_obj)
+
+                # Process direct child draw elements (not descendants)
+                for draw in subform.findall("./template:draw", self.namespaces):
+                    draw_obj = self.process_draw(draw)
+                    if draw_obj:
+                        # Add conditions to each draw element
+                        if conditions:
+                            if "conditions" not in draw_obj:
+                                draw_obj["conditions"] = []
+                            draw_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for draw identification
+                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                        self.all_items.append(draw_obj)
+
+                # Process direct child subforms (not descendants)
+                for nested_subform in subform.findall("./template:subform", self.namespaces):
+                    nested_group = self.process_subform(nested_subform)
+                    if nested_group:
+                        # Add conditions to nested group if they exist
+                        if conditions:
+                            if "conditions" not in nested_group:
+                                nested_group["conditions"] = []
+                            nested_group["conditions"].extend(conditions)
+                        self.all_items.append(nested_group)
+
+                return None
+
         except Exception as e:
             print(f"Error processing subform: {e}")
             return None
