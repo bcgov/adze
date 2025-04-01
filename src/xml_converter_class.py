@@ -86,29 +86,60 @@ class XDPParser:
             }
             return namespaces
     
-    def add_breadcrumb(self, tag):
+    def add_breadcrumb(self, tag, element=None):
         try:
-            """Add element tag to breadcrumb path"""
-            self.breadcrumb += f"<{tag}>"
+            """Add element tag and attributes to breadcrumb path"""
+            # Add basic tag
+            tag_with_attrs = f"<{tag}"
+            
+            # Add relevant attributes if element is provided
+            if element is not None and hasattr(element, 'attrib'):
+                for key, value in element.attrib.items():
+                    # Only include certain relevant attributes
+                    if key in ['name', 'type', 'ref', 'shape', 'contentType']:
+                        # Remove namespace prefix from attribute if present
+                        key = key.split("}")[-1] if "}" in key else key
+                        tag_with_attrs += f" {key}=\"{value}\""
+            
+            tag_with_attrs += ">"
+            self.breadcrumb += tag_with_attrs
+            
+            # Keep breadcrumb from growing too large
             if len(self.breadcrumb) > 200:
-                self.breadcrumb = self.breadcrumb[-200:]
+                # Keep only the last 200 characters but ensure we don't break in middle of a tag
+                truncated = self.breadcrumb[-200:]
+                # Find first complete opening tag
+                first_tag = truncated.find("<")
+                if first_tag >= 0:
+                    self.breadcrumb = truncated[first_tag:]
         except Exception as e:
             print(f"Error adding breadcrumb: {e}")
     
     def remove_breadcrumb(self, tag):
         try:
             """Remove the last element tag from breadcrumb"""
-            tag_str = f"<{tag}>"
-            index = self.breadcrumb.rfind(tag_str)
-            if index != -1:
-                self.breadcrumb = self.breadcrumb[:index]
+            # Find the last occurrence of a tag that starts with the given name
+            last_index = -1
+            tag_start = f"<{tag}"
+            
+            # Look for the tag with any attributes
+            i = self.breadcrumb.rfind(tag_start)
+            while i >= 0:
+                tag_end = self.breadcrumb.find(">", i)
+                if tag_end >= 0:
+                    last_index = i
+                    break
+                i = self.breadcrumb.rfind(tag_start, 0, i)
+            
+            if last_index >= 0:
+                self.breadcrumb = self.breadcrumb[:last_index]
         except Exception as e:
             print(f"Error removing breadcrumb: {e}")
     
     def get_breadcrumb(self):
         try:
-            """Get current breadcrumb path"""
-            return self.breadcrumb
+            """Get current normalized breadcrumb path"""
+            return self.normalize_path(self.breadcrumb)
         except Exception as e:
             print(f"Error getting breadcrumb: {e}")
             return ""
@@ -123,12 +154,132 @@ class XDPParser:
             print(f"Error generating next ID: {e}")
             return str(uuid.uuid4())
     
-    def find_mapping_for_path(self, path):
+    def normalize_path(self, path):
+        """Normalize an XML path for comparison by removing extra spaces and normalizing separators"""
         try:
-            """Find mapping configuration for given path"""
+            # Remove extra whitespace
+            path = " ".join(path.split())
+            # Normalize separators to single angle brackets
+            path = path.replace("//", "/")
+            path = path.replace("><", ">/<")
+            # Remove any leading/trailing separators
+            path = path.strip("/<>")
+            return path
+        except Exception as e:
+            print(f"Error normalizing path: {e}")
+            return path
+
+    def path_similarity(self, path1, path2):
+        """Calculate similarity between two XML paths with improved hierarchy handling"""
+        try:
+            # Normalize both paths
+            path1 = self.normalize_path(path1)
+            path2 = self.normalize_path(path2)
+            
+            # Split paths into components
+            parts1 = path1.split("/")
+            parts2 = path2.split("/")
+            
+            # Calculate matching score with position weighting
+            matches = 0
+            total_weight = 0
+            max_length = max(len(parts1), len(parts2))
+            
+            # Compare each part with position-based weighting
+            for i in range(min(len(parts1), len(parts2))):
+                # Calculate position weight (later positions matter more)
+                position_weight = 1 + (i / max_length)
+                total_weight += position_weight
+                
+                # Extract tag and attributes
+                tag1, attrs1 = self.split_tag_and_attrs(parts1[i])
+                tag2, attrs2 = self.split_tag_and_attrs(parts2[i])
+                
+                # Compare tags
+                if tag1 == tag2:
+                    matches += position_weight
+                elif tag1.replace("template:", "") == tag2.replace("template:", ""):
+                    # Match without namespace
+                    matches += 0.9 * position_weight
+                elif tag1.split("[")[0] == tag2.split("[")[0]:
+                    # Match ignoring predicates
+                    matches += 0.8 * position_weight
+                
+                # Compare attributes if both have them
+                if attrs1 and attrs2:
+                    attr_match = self.compare_attributes(attrs1, attrs2)
+                    matches += 0.2 * position_weight * attr_match
+            
+            # Calculate final score
+            return matches / (total_weight if total_weight > 0 else 1)
+        except Exception as e:
+            print(f"Error calculating path similarity: {e}")
+            return 0
+
+    def split_tag_and_attrs(self, part):
+        """Split a path component into tag and attributes"""
+        try:
+            if " " not in part:
+                return part, {}
+            
+            tag = part.split(" ")[0]
+            attrs = {}
+            
+            # Extract attributes
+            for attr in part.split(" ")[1:]:
+                if "=" in attr:
+                    key, value = attr.split("=", 1)
+                    attrs[key] = value.strip('"\'')
+            
+            return tag, attrs
+        except Exception as e:
+            print(f"Error splitting tag and attributes: {e}")
+            return part, {}
+
+    def compare_attributes(self, attrs1, attrs2):
+        """Compare two sets of attributes and return a similarity score"""
+        try:
+            if not attrs1 or not attrs2:
+                return 0
+            
+            # Get all unique keys
+            all_keys = set(attrs1.keys()) | set(attrs2.keys())
+            if not all_keys:
+                return 0
+            
+            matches = 0
+            for key in all_keys:
+                if key in attrs1 and key in attrs2:
+                    if attrs1[key] == attrs2[key]:
+                        matches += 1
+                    elif attrs1[key].lower() == attrs2[key].lower():
+                        matches += 0.9
+            
+            return matches / len(all_keys)
+        except Exception as e:
+            print(f"Error comparing attributes: {e}")
+            return 0
+
+    def find_mapping_for_path(self, path):
+        """Find mapping configuration for given path using fuzzy matching"""
+        try:
+            best_match = None
+            best_score = 0.7  # Minimum similarity threshold
+            
             for mapping in self.mapping.get("mappings", []):
-                if path.endswith(mapping.get("xmlPath", "")):
-                    return mapping
+                xml_path = mapping.get("xmlPath", "")
+                score = self.path_similarity(path, xml_path)
+                
+                if score > best_score:
+                    best_score = score
+                    best_match = mapping
+            
+            if best_match:
+                # Log the fuzzy match for debugging
+                if best_score < 1.0:
+                    print(f"Fuzzy matched path '{path}' to mapping '{best_match['xmlPath']}' with score {best_score}")
+                return best_match
+                
             return None
         except Exception as e:
             print(f"Error finding mapping for path: {e}")
@@ -313,7 +464,7 @@ class XDPParser:
             draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
             
             # Track breadcrumb for mapping lookup
-            self.add_breadcrumb(draw_name)
+            self.add_breadcrumb(draw_name, draw)
             current_path = self.get_breadcrumb()
             
             # Find mapping configuration for this draw element
@@ -336,6 +487,16 @@ class XDPParser:
                             text_value = html_text
                             break
             
+            # Get label using enhanced extraction
+            label = self.extract_label(draw)
+            
+            # If no label but we have text that looks like a label, use it
+            if not label and text_value:
+                # Check if text_value looks like a label
+                if text_value.endswith(':') or text_value.isupper() or len(text_value.split()) <= 4:
+                    label = text_value
+                    text_value = None  # Don't use the same text as both label and value
+            
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
             if mapping and mapping.get("fieldType"):
@@ -355,12 +516,12 @@ class XDPParser:
                 field_obj = {
                     "type": "text-input",
                     "id": self.next_id(),
-                    "label": mapping.get("label") if mapping else None,
+                    "label": label,
                     "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
-                        "name": None
+                        "name": draw_name
                     },
                     "placeholder": None,
                     "helperText": None,
@@ -371,14 +532,14 @@ class XDPParser:
                 field_obj = {
                     "type": "text-info",
                     "id": self.next_id(),
-                    "label": mapping.get("label") if mapping else None,
+                    "label": label,
                     "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
-                        "name": None
+                        "name": draw_name
                     },
-                    "value": text_value,  # Now properly set from value/text element
+                    "value": text_value,
                     "helperText": None
                 }
             
@@ -388,8 +549,8 @@ class XDPParser:
                     field_obj["required"] = mapping.get("required")
                 if mapping.get("styles"):
                     field_obj["styles"] = mapping.get("styles")
-                
-            self.Report.report_success(draw_name, 'text-info', text_value)
+            
+            self.Report.report_success(draw_name, field_type, label or text_value)
             self.remove_breadcrumb(draw_name)
             return field_obj
         except Exception as e:
@@ -400,13 +561,46 @@ class XDPParser:
             self.remove_breadcrumb(draw_name if 'draw_name' in locals() else "unknown")
             return None
     
+    def extract_label(self, field):
+        """Extract label from field using multiple methods"""
+        try:
+            label = None
+            
+            # Method 1: Direct caption
+            caption_elem = field.find(".//template:caption//template:text", self.namespaces)
+            if caption_elem is not None and caption_elem.text:
+                label = caption_elem.text.strip()
+            
+            # Method 2: Value text that looks like a label
+            if not label:
+                value_elem = field.find(".//template:value//template:text", self.namespaces)
+                if value_elem is not None and value_elem.text:
+                    text = value_elem.text.strip()
+                    # Check if this looks like a label (ends with :, all caps, etc)
+                    if text.endswith(':') or text.isupper() or len(text.split()) <= 4:
+                        label = text
+            
+            # Method 3: Field name converted to label
+            if not label:
+                field_name = field.attrib.get("name", "")
+                if field_name:
+                    # Convert camelCase/snake_case to space-separated words
+                    import re
+                    label = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', field_name)).strip()
+                    label = ' '.join(word.capitalize() for word in re.split('[-_]', label))
+            
+            return label
+        except Exception as e:
+            print(f"Error extracting label: {e}")
+            return None
+
     def process_field(self, field):
         try:
             """Process a field element"""
             field_name = field.attrib.get("name", f"field_{self.id_counter}")
             
             # Get current XML path for mapping lookup
-            self.add_breadcrumb(field_name)
+            self.add_breadcrumb(field_name, field)
             current_path = self.get_breadcrumb()
             
             # Find mapping configuration for this field path
@@ -427,11 +621,8 @@ class XDPParser:
             ui_child = ui_children[0]
             ui_tag = ui_child.tag.split('}')[-1] if '}' in ui_child.tag else ui_child.tag
 
-            # Get caption/label if available
-            caption_text = None
-            caption_elem = field.find("./template:caption/template:value/template:text", self.namespaces)
-            if caption_elem is not None and caption_elem.text:
-                caption_text = caption_elem.text
+            # Get label using enhanced extraction
+            label = self.extract_label(field)
             
             # Get help text if available
             help_text = None
@@ -454,7 +645,7 @@ class XDPParser:
                 field_type = mapping.get("fieldType")
                 # Apply other mapping configurations
                 if mapping.get("label"):
-                    caption_text = mapping.get("label")
+                    label = mapping.get("label")
                 if mapping.get("helpText"):
                     help_text = mapping.get("helpText")
             
@@ -463,7 +654,7 @@ class XDPParser:
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "mask": None,
@@ -507,7 +698,7 @@ class XDPParser:
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
@@ -534,13 +725,13 @@ class XDPParser:
 
                 field_obj = {
                     "type": "date",
-                    "label": caption_text,
+                    "label": label,
                     "id": self.next_id(),
                     "fieldId": str(self.next_id()),
                     "codeContext": {
                         "name": None
                     },
-                    "label": caption_text,
+                    "label": label,
                     "placeholder": None,
                     "mask": date_format,
                     "conditions": []
@@ -550,7 +741,7 @@ class XDPParser:
                 field_obj = {
                     "type": "button",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
@@ -566,7 +757,7 @@ class XDPParser:
                     "mask": None,
                     "size": "md",
                     "type": "dropdown",
-                    "label": caption_text if caption_text else "Dropdown",
+                    "label": label if label else "Dropdown",
                     "styles": None,
                     "isMulti": False,
                     "helpText": None,
@@ -598,7 +789,7 @@ class XDPParser:
                 field_obj = {
                     "type": "checkbox",
                     "id": self.next_id(),
-                    "label": caption_text if caption_text else "Checkbox",
+                    "label": label if label else "Checkbox",
                     "helperText": "",
                     "webStyles": None,
                     "pdfStyles": None,
@@ -628,7 +819,7 @@ class XDPParser:
                     "id": self.next_id(),
                     "mask": None,
                     "type": "text-input",  # Overriding from "signature" to "text-input"
-                    "label": caption_text if caption_text else None,
+                    "label": label if label else None,
                     "styles": None,
                     "helpText": help_text,
                     "inputType": "text",
