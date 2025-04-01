@@ -1,4 +1,4 @@
-name: Deploy to OpenShift
+name: Deploy to OpenShift (Prod)
 
 on:
   push:
@@ -11,26 +11,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Extract Git SHA
+        id: vars
+        run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       - name: Install OpenShift CLI
         run: |
           curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
-          tar -xvf oc.tar.gz
+          tar -xzf oc.tar.gz
           sudo mv oc /usr/local/bin
-          oc version
 
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.14.0
 
-      - name: Login to OpenShift
+      - name: Login to OpenShift (Prod)
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN_PROD }} --insecure-skip-tls-verify
 
-      - name: Deploy to OpenShift (Prod)
+      - name: Deploy using Helm (Prod)
         run: |
           helm upgrade --install adze-prod ./helm-chart \
             --namespace ${{ secrets.OPENSHIFT_NAMESPACE_PROD }} \
+            --set image.tag=${{ env.SHORT_SHA }} \
             -f helm-chart/values-prod.yaml
