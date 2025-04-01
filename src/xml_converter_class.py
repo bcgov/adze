@@ -382,7 +382,6 @@ class XDPParser:
                             "name": None
                         },
                         "value": text_value,
-                        "helperText": None
                     }
                     self.all_items.append(text_field)
                     self.Report.report_success(draw_name, 'text-info', text_value)
@@ -414,7 +413,6 @@ class XDPParser:
                         "name": None
                     },
                     "value": text_value,
-                    "helperText": None
                 }
                 page_fields.append(text_field)
                 self.Report.report_success(draw_name, 'text-info', text_value)
@@ -524,7 +522,6 @@ class XDPParser:
                         "name": draw_name
                     },
                     "placeholder": None,
-                    "helperText": None,
                     "inputType": "text"
                 }
             else:
@@ -540,7 +537,6 @@ class XDPParser:
                         "name": draw_name
                     },
                     "value": text_value,
-                    "helperText": None
                 }
             
             # Apply any additional mapping properties
@@ -662,7 +658,6 @@ class XDPParser:
                         "name": None
                     },
                     "placeholder": None,
-                    "helperText": None,
                     "inputType": "text",
                     "conditions": []
                 }
@@ -764,7 +759,6 @@ class XDPParser:
                     "isInline": False,
                     "direction": "bottom",
                     "listItems": [],  # List of dropdown options
-                    "helperText": "",
                     "codeContext": {
                         "name": field_name
                     },
@@ -790,7 +784,6 @@ class XDPParser:
                     "type": "checkbox",
                     "id": self.next_id(),
                     "label": label if label else "Checkbox",
-                    "helperText": "",
                     "webStyles": None,
                     "pdfStyles": None,
                     "mask": None,
@@ -823,7 +816,6 @@ class XDPParser:
                     "styles": None,
                     "helpText": help_text,
                     "inputType": "text",
-                    "helperText": "",
                     "codeContext": {
                         "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
                     },
