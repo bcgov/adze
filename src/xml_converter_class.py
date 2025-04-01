@@ -288,10 +288,9 @@ class XDPParser:
     def create_output_structure(self):
         try:
             """Create the base output JSON structure"""
-            # Extract form ID from filename or default
-            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]  # Remove extension
-            # Get form title if available
-            form_title = "Work Search Activity Record"  # Default title
+            # Extract form ID from filename (e.g. CFL04511 from CFL04511.xml)
+            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+
             
             # Find title text manually since contains() is not supported in ElementTree XPath
             for text_elem in self.root.findall(".//template:text", self.namespaces):
@@ -313,13 +312,20 @@ class XDPParser:
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
+                        # In case of error, try to get form_id from filename, otherwise use default
+            try:
+                form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+            except:
+                form_id = "FORM0001"
+                
+
             return {
                 "version": None,
                 "ministry_id": "0",
                 "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
                 "title": None,
-                "form_id": "FORM0001",
+                "form_id": form_id,
                 "deployed_to": None,
                 "dataSources": [],
                 "javascript": self.javascript_section,  # Add JavaScript section
@@ -375,7 +381,6 @@ class XDPParser:
                         "type": "text-info",
                         "id": self.next_id(),
                         "label": None,
-                        "helpText": None,
                         "styles": None,
                         "mask": None,
                         "codeContext": {
@@ -406,7 +411,6 @@ class XDPParser:
                     "type": "text-info",
                     "id": self.next_id(),
                     "label": None,
-                    "helpText": None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -515,7 +519,6 @@ class XDPParser:
                     "type": "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -530,7 +533,6 @@ class XDPParser:
                     "type": "text-info",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -642,8 +644,6 @@ class XDPParser:
                 # Apply other mapping configurations
                 if mapping.get("label"):
                     label = mapping.get("label")
-                if mapping.get("helpText"):
-                    help_text = mapping.get("helpText")
             
             # Create field object based on UI type
             if ui_tag == "textEdit":
@@ -651,7 +651,6 @@ class XDPParser:
                     "type": field_type or "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -694,7 +693,6 @@ class XDPParser:
                     "type": field_type or "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
@@ -737,7 +735,6 @@ class XDPParser:
                     "type": "button",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
@@ -755,7 +752,6 @@ class XDPParser:
                     "label": label if label else "Dropdown",
                     "styles": None,
                     "isMulti": False,
-                    "helpText": None,
                     "isInline": False,
                     "direction": "bottom",
                     "listItems": [],  # List of dropdown options
@@ -814,7 +810,6 @@ class XDPParser:
                     "type": "text-input",  # Overriding from "signature" to "text-input"
                     "label": label if label else None,
                     "styles": None,
-                    "helpText": help_text,
                     "inputType": "text",
                     "codeContext": {
                         "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
@@ -1013,7 +1008,6 @@ function {method_name}(fieldId) {{
                     "type": "group",
                     "id": self.next_id(),
                     "label": None,
-                    "helpText": None,
                     "styles": None,
                     "codeContext": {
                         "name": subform_name

@@ -156,27 +156,27 @@ class OberonParser:
     def create_output_structure(self):
         try:
             """Create the base output JSON structure"""
-            # Extract form ID from filename or default
-            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]  # Remove extension
-            
-            # Get form title if available
-            form_title = "Form"  # Default title
-            title_elem = self.root.find(".//xh:title", self.namespaces)
-            if title_elem is not None and title_elem.text:
-                form_title = title_elem.text
+
+            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+
             
             return {
-                "version": self.mapping["constants"]["version"],
+                "version": None,
                 "ministry_id": self.mapping["constants"]["ministry_id"],
                 "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                "title": form_title,
+                "title": None,
                 "form_id": form_id,
                 "deployed_to": None,
                 "dataSources": []
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
+                        # In case of error, try to get form_id from filename, otherwise use default
+            try:
+                form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+            except:
+                form_id = "FORM0001"
             return {
                 "version": None,
                 "ministry_id": "0",
@@ -532,8 +532,7 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "value": field_value,
-                "helperText": None
+                "value": field_value
             }
         elif field_type == "text-input":
             field_obj = {
@@ -547,7 +546,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": None,
-                "helperText": None,
                 "inputType": "text"
             }
             if field_value:
@@ -564,8 +562,7 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": None,
-                "helperText": None
+                "placeholder": None
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
@@ -593,7 +590,6 @@ class OberonParser:
                 "id": self.next_id(),
                 "label": label,
                 "helpText": hint,
-                "helperText": "",
                 "webStyles": None,
                 "pdfStyles": None,
                 "mask": None,
@@ -615,7 +611,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "listItems": [],
-                "helperText": None,
                 "direction": "vertical"
             }
             if field_value and field_value.strip():
@@ -635,7 +630,6 @@ class OberonParser:
                 "isInline": False,
                 "direction": "bottom",
                 "listItems": [],
-                "helperText": "",
                 "codeContext": {
                     "name": field_name
                 },
@@ -673,7 +667,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": "example@example.com",
-                "helperText": None,
                 "inputType": "email"
             }
             if field_value and field_value.strip():
@@ -692,7 +685,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": "(123) 456-7890",
-                "helperText": None,
                 "inputType": "tel"
             }
             if field_value and field_value.strip():
@@ -709,8 +701,7 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": "Street address",
-                "helperText": None
+                "placeholder": "Street address"
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
