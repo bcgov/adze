@@ -223,6 +223,14 @@ class OrbeonParser:
             # Process each grid in the section
             for grid in section:
                 grid_name = grid.tag
+                
+                # Skip processing if this is not a grid element
+                if not grid_name.startswith("grid-"):
+                    field_obj = self.process_field(grid)
+                    if field_obj:
+                        self.all_items.append(field_obj)
+                    continue
+                
                 self.add_breadcrumb(grid_name)
                 
                 # Handle grid iterations differently (they can contain repeating fields)
@@ -302,6 +310,11 @@ class OrbeonParser:
             # Check if field is bound to an input
             field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
             
+            # If field_type is None, this is not a field we want to process
+            if field_type is None:
+                self.remove_breadcrumb(field_name)
+                return None
+            
             # Special handling for control elements with text content
             if field_name.startswith("control-"):
                 # Check if it's an explanation element
@@ -327,11 +340,21 @@ class OrbeonParser:
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
-            # Process dropdown options if needed
-            if field_type == "dropdown":
-                options = self.extract_dropdown_options(field_elem)
-                if options:
-                    field_obj["listItems"] = options
+            # Process dropdown or radio options
+            if field_type == "dropdown" or field_type == "radio":
+                # Special handling for formReady field
+                if field_name == "formReady":
+                    field_obj["listItems"] = [
+                        {"text": "Yes", "value": "true", "name": "Yes"},
+                        {"text": "No", "value": "false", "name": "No"}
+                    ]
+                    # Convert boolean string to actual value
+                    if field_value is not None:
+                        field_obj["value"] = field_value.lower() == "true"
+                else:
+                    options = self.extract_dropdown_options(field_elem)
+                    if options:
+                        field_obj["listItems"] = options
             
             # Process checkbox value
             if field_type == "checkbox":
@@ -384,6 +407,10 @@ class OrbeonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
+            # Skip grid elements
+            if field_name.startswith("grid-"):
+                return None
+            
             # Check mapping first
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
@@ -391,6 +418,10 @@ class OrbeonParser:
             # Check for file upload fields
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
+            
+            # Check if field is formReady (special case for boolean field that should be a radio)
+            if field_name == "formReady":
+                return "radio"
             
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
@@ -403,6 +434,27 @@ class OrbeonParser:
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
+                
+                # Check if it's a radio button by looking for items with labels and values
+                # First check in the field element itself
+                items = self.form_instance.findall(f".//{field_name}/item", self.namespaces)
+                if items:
+                    for item in items:
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and value is not None:
+                            return "radio"
+                
+                # If not found in field element, check in form resources
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    items = control_elem.findall(".//item", self.namespaces)
+                    if items:
+                        for item in items:
+                            label = item.find("label", self.namespaces)
+                            value = item.find("value", self.namespaces)
+                            if label is not None and value is not None:
+                                return "radio"
             
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
@@ -768,7 +820,24 @@ class OrbeonParser:
         """Extract dropdown options from field element"""
         try:
             options = []
-            # Look for items in the resources instance
+            
+            # First check if the field element has items directly in the form instance
+            field_instance = self.form_instance.find(f".//{field_elem.tag}", self.namespaces)
+            if field_instance is not None:
+                items = field_instance.findall("item", self.namespaces)
+                if items:
+                    for item in items:
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text:
+                            options.append({
+                                "text": label.text.strip(),
+                                "value": value.text.strip() if value is not None and value.text else label.text.strip(),
+                                "name": value.text.strip() if value is not None and value.text else label.text.strip()
+                            })
+                    return options
+            
+            # If no items found in form instance, look in the resources instance
             resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
             if resources is not None:
                 # Find the field's resource section
