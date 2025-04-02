@@ -795,7 +795,11 @@ class XDPParser:
                 for index, item in enumerate(visible_items):
                     value = saved_values[index].text if index < len(saved_values) else item.text
                     if item.text:
-                        list_items.append({"text": item.text.strip(), "value": value.strip()})
+                        list_items.append({
+                            "text": item.text.strip(),
+                            "value": value.strip(),
+                            "name": value.strip()
+                        })
 
                 field_obj["listItems"] = list_items
             

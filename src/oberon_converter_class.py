@@ -781,7 +781,8 @@ class OberonParser:
                         if label is not None and label.text:
                             options.append({
                                 "text": label.text.strip(),
-                                "value": value.text.strip() if value is not None and value.text else label.text.strip()
+                                "value": value.text.strip() if value is not None and value.text else label.text.strip(),
+                                "name": value.text.strip() if value is not None and value.text else label.text.strip()
                             })
             return options
         except Exception as e:
