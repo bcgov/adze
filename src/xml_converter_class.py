@@ -812,7 +812,7 @@ class XDPParser:
                 }
                 
                 # Extract visible items from `<items>` tag
-                visible_items = field.findall("./template:items/template:text", self.namespaces)
+                visible_items = field.findall("./template:items[not(@presence='hidden')]/template:text", self.namespaces)
                 saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
 
                 # Ensure correct mapping of labels and values
