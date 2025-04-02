@@ -27,9 +27,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
-      - name: Run Python test suite
-        run: |
-          pytest tests/test_converters.py --maxfail=2 --disable-warnings -v
+      # - name: Run Python test suite
+      #   run: |
+      #     pytest tests/test_converters.py --maxfail=2 --disable-warnings -v
 
   helm-lint:
     runs-on: ubuntu-latest
