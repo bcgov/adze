@@ -74,7 +74,7 @@ spec:
       volumes:
         - name: data-volume
           persistentVolumeClaim:
-            claimName: {{ include "helm-chart.fullname" $ }}-pvc
+            claimName: {{ $.Values.persistence.existingClaim | default (printf "%s-pvc" (include "helm-chart.fullname" $)) }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -78,7 +78,7 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: adze-dev-c79ac4-dev.apps.silver.devops.gov.bc.ca
+    - host: adze-c79ac4-dev.apps.silver.devops.gov.bc.ca
       paths:
         - path: /upload-form
           pathType: Prefix
@@ -110,6 +110,7 @@ persistence:
   enabled: true
   accessMode: ReadWriteMany
   size: 1Gi
+  existingClaim: adze-dev-pvc
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
