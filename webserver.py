@@ -97,7 +97,7 @@ def upload():
             return f"{error_msg}<br><br><a href='/upload-form'><button>⬅ Back to Upload</button></a>", 500
         except Exception as e:
             error_msg = f"Unexpected error processing {filename}: {str(e)}"
-            print(error_msg)
+            # print(error_msg)
             return f"{error_msg}<br><br><a href='/upload-form'><button>⬅ Back to Upload</button></a>", 500
 
     # Generate download links
@@ -167,4 +167,5 @@ if __name__ == "__main__":
     # Get host from environment variable or use default
     host = os.getenv("HOST", "0.0.0.0")
     # Run the Flask app
-    app.run(host=host, port=port, debug=True)
+    # app.run(host=host, port=port, debug=True)
+    app.run(host=host, port=port, debug=False)
