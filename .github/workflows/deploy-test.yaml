@@ -79,7 +79,7 @@ jobs:
             -n c79ac4-test          
 
       - name: Trigger Tekton Pipeline (Sysdig)
-        if: ${{ false }}  # Enable when ready
+        # if: ${{ false }}  # Enable when ready
         run: |
           tkn pipeline start adze-integration-pipeline \
             -n c79ac4-test \
