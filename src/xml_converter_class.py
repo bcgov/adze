@@ -811,9 +811,22 @@ class XDPParser:
                     "conditions": []
                 }
                 
-                # Extract visible items from `<items>` tag
-                visible_items = field.findall("./template:items[not(@presence='hidden')]/template:text", self.namespaces)
-                saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
+                # Extract items directly with their attributes using ElementTree's API
+                visible_items = []
+                saved_values = []
+                
+                # Get all items elements first
+                items_elements = field.findall("./template:items", self.namespaces)
+                for items_elem in items_elements:
+                    is_hidden = items_elem.get("presence") == "hidden"
+                    is_saved = items_elem.get("save") == "1"
+                    
+                    # Get text elements within this items element
+                    for text_elem in items_elem.findall("./template:text", self.namespaces):
+                        if is_saved:
+                            saved_values.append(text_elem)
+                        elif not is_hidden:
+                            visible_items.append(text_elem)
 
                 # Ensure correct mapping of labels and values
                 list_items = []
