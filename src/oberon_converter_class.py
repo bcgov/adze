@@ -388,6 +388,10 @@ class OberonParser:
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
             
+            # Check for file upload fields
+            if field_attributes.get('filename') or field_attributes.get('mediatype'):
+                return "file"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
                 # First check if it's an explanation element
@@ -707,6 +711,27 @@ class OberonParser:
                 field_obj["value"] = field_value.strip()
             if validation_rules:
                 field_obj["validation"] = validation_rules
+        elif field_type == "file":
+            field_obj = {
+                "type": "file",
+                "id": self.next_id(),
+                "label": label,
+                "helpText": hint,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "accept": field_attributes.get('mediatype', '*/*'),
+                "multiple": False,
+                "maxSize": None,  # Can be set from mapping if needed
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
+            if field_attributes.get('filename'):
+                field_obj["filename"] = field_attributes.get('filename')
+            if field_attributes.get('size'):
+                field_obj["size"] = field_attributes.get('size')
         
         # Apply any additional mappings
         if mapping:

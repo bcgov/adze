@@ -646,7 +646,31 @@ class XDPParser:
                     label = mapping.get("label")
             
             # Create field object based on UI type
-            if ui_tag == "textEdit":
+            if ui_tag == "fileSelect":
+                field_obj = {
+                    "type": "file",
+                    "id": self.next_id(),
+                    "label": label,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "accept": "*/*",
+                    "multiple": False,
+                    "maxSize": None,
+                    "validation": []
+                }
+                
+                # Add databinding if available
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+                    
+                    # Apply any dataSource mappings
+                    if mapping and mapping.get("dataSource"):
+                        field_obj["databindings"]["source"] = mapping.get("dataSource")
+            
+            elif ui_tag == "textEdit":
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
