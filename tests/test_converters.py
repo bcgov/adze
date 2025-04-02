@@ -2,7 +2,7 @@ import unittest
 import os
 import json
 import xml.etree.ElementTree as ET
-from src.oberon_converter_class import OberonParser
+from src.orbeon_converter_class import OrbeonParser
 from src.xml_converter_class import XDPParser
 
 class TestConverters(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestConverters(unittest.TestCase):
         os.makedirs(self.test_data_dir, exist_ok=True)
         
         # Set paths for test files
-        self.oberon_xml_path = os.path.join(self.test_data_dir, 'test_oberon.xml')
+        self.orbeon_xml_path = os.path.join(self.test_data_dir, 'test_orbeon.xml')
         self.xdp_xml_path = os.path.join(self.test_data_dir, 'test_xdp.xml')
         self.mapping_file_path = os.path.join(self.test_data_dir, 'test_mapping.json')
         
@@ -24,8 +24,8 @@ class TestConverters(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test method."""
         # Remove test files
-        if os.path.exists(self.oberon_xml_path):
-            os.remove(self.oberon_xml_path)
+        if os.path.exists(self.orbeon_xml_path):
+            os.remove(self.orbeon_xml_path)
         if os.path.exists(self.xdp_xml_path):
             os.remove(self.xdp_xml_path)
         if os.path.exists(self.mapping_file_path):
@@ -33,8 +33,8 @@ class TestConverters(unittest.TestCase):
 
     def create_test_xml_files(self):
         """Create test XML files for both converters."""
-        # Create test Oberon XML
-        oberon_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+        # Create test Orbeon XML
+        orbeon_xml = '''<?xml version="1.0" encoding="UTF-8"?>
         <xh:html xmlns:xh="http://www.w3.org/1999/xhtml"
                  xmlns:xf="http://www.w3.org/2002/xforms"
                  xmlns:fr="http://orbeon.org/oxf/xml/form-runner"
@@ -103,8 +103,8 @@ class TestConverters(unittest.TestCase):
         </xdp:xdp>'''
         
         # Write test files
-        with open(self.oberon_xml_path, 'w') as f:
-            f.write(oberon_xml)
+        with open(self.orbeon_xml_path, 'w') as f:
+            f.write(orbeon_xml)
         with open(self.xdp_xml_path, 'w') as f:
             f.write(xdp_xml)
 
@@ -140,11 +140,11 @@ class TestConverters(unittest.TestCase):
         with open(self.mapping_file_path, 'w') as f:
             json.dump(test_mapping, f)
 
-    def test_oberon_parser_initialization(self):
-        """Test OberonParser initialization."""
-        parser = OberonParser(self.oberon_xml_path, self.mapping_file_path)
+    def test_orbeon_parser_initialization(self):
+        """Test OrbeonParser initialization."""
+        parser = OrbeonParser(self.orbeon_xml_path, self.mapping_file_path)
         self.assertIsNotNone(parser)
-        self.assertEqual(parser.xml_filename, self.oberon_xml_path)
+        self.assertEqual(parser.xml_filename, self.orbeon_xml_path)
         self.assertEqual(parser.mapping_file, self.mapping_file_path)
         self.assertIsNotNone(parser.mapping)
         self.assertIsNotNone(parser.root)
@@ -160,9 +160,9 @@ class TestConverters(unittest.TestCase):
         self.assertIsNotNone(parser.root)
         self.assertIsNotNone(parser.root_subform)
 
-    def test_oberon_field_type_determination(self):
-        """Test field type determination in OberonParser."""
-        parser = OberonParser(self.oberon_xml_path, self.mapping_file_path)
+    def test_orbeon_field_type_determination(self):
+        """Test field type determination in OrbeonParser."""
+        parser = OrbeonParser(self.orbeon_xml_path, self.mapping_file_path)
         
         # Test text-info type
         text_info_type = parser.determine_field_type("control-476", None, {}, None)
@@ -190,9 +190,9 @@ class TestConverters(unittest.TestCase):
         date_type = parser.process_field(date_field)["type"]
         self.assertEqual(date_type, "date")
 
-    def test_oberon_field_creation(self):
-        """Test field object creation in OberonParser."""
-        parser = OberonParser(self.oberon_xml_path, self.mapping_file_path)
+    def test_orbeon_field_creation(self):
+        """Test field object creation in OrbeonParser."""
+        parser = OrbeonParser(self.orbeon_xml_path, self.mapping_file_path)
         
         # Test text-info field creation
         text_info_field = parser.create_field_object(
@@ -233,9 +233,9 @@ class TestConverters(unittest.TestCase):
         self.assertEqual(date_obj["label"], "Date Field")
         self.assertEqual(date_obj["mask"], "yyyy-MM-dd")
 
-    def test_oberon_parser_full_conversion(self):
-        """Test complete Oberon XML to JSON conversion."""
-        parser = OberonParser(self.oberon_xml_path, self.mapping_file_path)
+    def test_orbeon_parser_full_conversion(self):
+        """Test complete Orbeon XML to JSON conversion."""
+        parser = OrbeonParser(self.orbeon_xml_path, self.mapping_file_path)
         result = parser.parse()
         
         self.assertIsNotNone(result)
@@ -269,7 +269,7 @@ class TestConverters(unittest.TestCase):
         """Test handling of invalid XML files."""
         # Test with non-existent file
         with self.assertRaises(FileNotFoundError):
-            OberonParser("nonexistent.xml")
+            OrbeonParser("nonexistent.xml")
         
         # Test with invalid XML content
         invalid_xml_path = os.path.join(self.test_data_dir, 'invalid.xml')
@@ -277,7 +277,7 @@ class TestConverters(unittest.TestCase):
             f.write("<invalid>xml</invalid>")
         
         with self.assertRaises(Exception):
-            OberonParser(invalid_xml_path)
+            OrbeonParser(invalid_xml_path)
         
         # Clean up
         if os.path.exists(invalid_xml_path):
@@ -286,7 +286,7 @@ class TestConverters(unittest.TestCase):
     def test_mapping_file_handling(self):
         """Test handling of mapping file."""
         # Test with non-existent mapping file
-        parser = OberonParser(self.oberon_xml_path, "nonexistent.json")
+        parser = OrbeonParser(self.orbeon_xml_path, "nonexistent.json")
         self.assertIsNone(parser.mapping)
         
         # Test with invalid JSON in mapping file
@@ -294,7 +294,7 @@ class TestConverters(unittest.TestCase):
         with open(invalid_mapping_path, 'w') as f:
             f.write("{invalid json}")
         
-        parser = OberonParser(self.oberon_xml_path, invalid_mapping_path)
+        parser = OrbeonParser(self.orbeon_xml_path, invalid_mapping_path)
         self.assertIsNone(parser.mapping)
         
         # Clean up

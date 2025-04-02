@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from src.report import Report
 
-class OberonParser:
+class OrbeonParser:
     def __init__(self, xml_filename, mapping_file=None):
         try:
             self.xml_filename = xml_filename
@@ -32,14 +32,14 @@ class OberonParser:
             self.tree = ET.parse(xml_filename)
             self.root = self.tree.getroot()
             
-            # Get form instance - the main data container in Oberon
+            # Get form instance - the main data container in Orbeon
             self.form_instance = self.root.find(".//xf:instance[@id='fr-form-instance']", self.namespaces)
             if self.form_instance is None:
-                raise ValueError("Form instance not found in Oberon XML")
+                raise ValueError("Form instance not found in Orbeon XML")
                 
             self.form_data = self.form_instance.find(".//form", self.namespaces)
             if self.form_data is None:
-                raise ValueError("Form data not found in Oberon XML")
+                raise ValueError("Form data not found in Orbeon XML")
 
             # Find bind elements for additional metadata
             self.form_binds = self.root.find(".//xf:bind[@id='fr-form-binds']", self.namespaces)
@@ -50,14 +50,14 @@ class OberonParser:
             # Get form resources for labels
             self.form_resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
             if self.form_resources is None:
-                raise ValueError("Form resources not found in Oberon XML")
+                raise ValueError("Form resources not found in Orbeon XML")
 
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
             self.Report = Report(xml_filename)
         except Exception as e:
-            print(f"Error initializing OberonParser: {e}")
+            print(f"Error initializing OrbeonParser: {e}")
             raise
     
     def extract_binds(self, bind_element, parent_path=""):
@@ -156,27 +156,27 @@ class OberonParser:
     def create_output_structure(self):
         try:
             """Create the base output JSON structure"""
-            # Extract form ID from filename or default
-            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]  # Remove extension
-            
-            # Get form title if available
-            form_title = "Form"  # Default title
-            title_elem = self.root.find(".//xh:title", self.namespaces)
-            if title_elem is not None and title_elem.text:
-                form_title = title_elem.text
+
+            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+
             
             return {
-                "version": self.mapping["constants"]["version"],
+                "version": None,
                 "ministry_id": self.mapping["constants"]["ministry_id"],
                 "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                "title": form_title,
+                "title": None,
                 "form_id": form_id,
                 "deployed_to": None,
                 "dataSources": []
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
+                        # In case of error, try to get form_id from filename, otherwise use default
+            try:
+                form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+            except:
+                form_id = "FORM0001"
             return {
                 "version": None,
                 "ministry_id": "0",
@@ -388,6 +388,10 @@ class OberonParser:
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
             
+            # Check for file upload fields
+            if field_attributes.get('filename') or field_attributes.get('mediatype'):
+                return "file"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
                 # First check if it's an explanation element
@@ -532,8 +536,7 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "value": field_value,
-                "helperText": None
+                "value": field_value
             }
         elif field_type == "text-input":
             field_obj = {
@@ -547,7 +550,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": None,
-                "helperText": None,
                 "inputType": "text"
             }
             if field_value:
@@ -564,8 +566,7 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": None,
-                "helperText": None
+                "placeholder": None
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
@@ -593,7 +594,6 @@ class OberonParser:
                 "id": self.next_id(),
                 "label": label,
                 "helpText": hint,
-                "helperText": "",
                 "webStyles": None,
                 "pdfStyles": None,
                 "mask": None,
@@ -615,7 +615,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "listItems": [],
-                "helperText": None,
                 "direction": "vertical"
             }
             if field_value and field_value.strip():
@@ -635,7 +634,6 @@ class OberonParser:
                 "isInline": False,
                 "direction": "bottom",
                 "listItems": [],
-                "helperText": "",
                 "codeContext": {
                     "name": field_name
                 },
@@ -673,7 +671,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": "example@example.com",
-                "helperText": None,
                 "inputType": "email"
             }
             if field_value and field_value.strip():
@@ -692,7 +689,6 @@ class OberonParser:
                     "name": field_name
                 },
                 "placeholder": "(123) 456-7890",
-                "helperText": None,
                 "inputType": "tel"
             }
             if field_value and field_value.strip():
@@ -709,13 +705,33 @@ class OberonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": "Street address",
-                "helperText": None
+                "placeholder": "Street address"
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
             if validation_rules:
                 field_obj["validation"] = validation_rules
+        elif field_type == "file":
+            field_obj = {
+                "type": "file",
+                "id": self.next_id(),
+                "label": label,
+                "helpText": hint,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "accept": field_attributes.get('mediatype', '*/*'),
+                "multiple": False,
+                "maxSize": None,  # Can be set from mapping if needed
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
+            if field_attributes.get('filename'):
+                field_obj["filename"] = field_attributes.get('filename')
+            if field_attributes.get('size'):
+                field_obj["size"] = field_attributes.get('size')
         
         # Apply any additional mappings
         if mapping:
@@ -765,7 +781,8 @@ class OberonParser:
                         if label is not None and label.text:
                             options.append({
                                 "text": label.text.strip(),
-                                "value": value.text.strip() if value is not None and value.text else label.text.strip()
+                                "value": value.text.strip() if value is not None and value.text else label.text.strip(),
+                                "name": value.text.strip() if value is not None and value.text else label.text.strip()
                             })
             return options
         except Exception as e:
