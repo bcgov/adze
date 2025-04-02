@@ -326,32 +326,22 @@ class OrbeonParser:
             # Check if field is bound to an input
             field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
             
-            # If field_type is None, this is not a field we want to process
-            if field_type is None:
-                self.remove_breadcrumb(field_name)
-                return None
-            
-            # Special handling for control elements with text content
-            if field_name.startswith("control-"):
-                # Check if it's an explanation element
-                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
-                if explanation_elem is not None:
-                    field_type = "text-info"
-                    # Get text content from form resources
-                    text_ref = explanation_elem.find(".//fr:text", self.namespaces)
-                    if text_ref is not None:
-                        # Extract the reference path
-                        ref_path = text_ref.get("ref")
-                        if ref_path and ref_path.startswith("$form-resources/"):
-                            # Remove the $form-resources/ prefix
-                            ref_path = ref_path[len("$form-resources/"):]
-                            # Find the text in form resources
-                            resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
-                            if resource_text is not None:
-                                field_value = resource_text.text
-                elif form_instance_elem is not None or text_elem is not None:
-                    field_type = "text-info"
-                    field_value = form_instance_elem.text if form_instance_elem is not None else text_elem.text
+            # Special handling for explanation fields
+            explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+            if explanation_elem is not None:
+                field_type = "text-info"
+                # Get text content from form resources
+                text_ref = explanation_elem.find(".//fr:text", self.namespaces)
+                if text_ref is not None:
+                    # Extract the reference path
+                    ref_path = text_ref.get("ref")
+                    if ref_path and ref_path.startswith("$form-resources/"):
+                        # Remove the $form-resources/ prefix
+                        ref_path = ref_path[len("$form-resources/"):]
+                        # Find the text in form resources
+                        resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
+                        if resource_text is not None:
+                            field_value = resource_text.text
             
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
@@ -426,13 +416,13 @@ class OrbeonParser:
             if field_name == "formReady":
                 return "radio"
             
+            # Check if field has an explanation element
+            explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+            if explanation_elem is not None:
+                return "text-info"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
-                # First check if it's an explanation element
-                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
-                if explanation_elem is not None:
-                    return "text-info"
-                
                 # Then check directly in the field element
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
