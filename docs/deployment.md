@@ -242,3 +242,5 @@ Tekton-based scanning is designed but not fully deployed:
 | 5    | Optional Tekton Trigger (test) | Scans image in `c79ac4-test` (future) |
 
 ---
+   
+ 
