@@ -76,10 +76,17 @@ jobs:
           oc delete secret sysdig-api-secret -n c79ac4-test --ignore-not-found
           oc create secret generic sysdig-api-secret \
             --from-literal=token=${{ secrets.SYSDIG_API_TOKEN }} \
-            -n c79ac4-test          
+            -n c79ac4-test
+
+      - name: Install Tekton CLI (tkn)
+        run: |
+          curl -LO https://github.com/tektoncd/cli/releases/download/v0.51.0/tkn_0.51.0_Linux_x86_64.tar.gz
+          tar -xzf tkn_0.51.0_Linux_x86_64.tar.gz
+          sudo mv tkn /usr/local/bin
+          tkn version
 
       - name: Trigger Tekton Pipeline (Sysdig)
-        if: ${{ false }}  # Enable when ready
+        # if: ${{ false }}  # Enable when ready
         run: |
           tkn pipeline start adze-integration-pipeline \
             -n c79ac4-test \
