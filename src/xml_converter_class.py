@@ -676,7 +676,6 @@ class XDPParser:
                     "type": "file",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": field_name

@@ -220,9 +220,33 @@ class OrbeonParser:
             section_name = section.tag
             self.add_breadcrumb(section_name)
             
+            # Get section label
+            section_label = self.get_field_label(section_name)
+            
+            # Create section object
+            if section_label:
+                section_obj = {
+                    "type": "text-info",
+                    "id": self.next_id(),
+                    "label": section_label,
+                    "codeContext": {
+                        "name": section_name
+                    },
+                    "value": section_label
+                }
+                self.all_items.append(section_obj)
+            
             # Process each grid in the section
             for grid in section:
                 grid_name = grid.tag
+                
+                # Skip processing if this is not a grid element
+                if not grid_name.startswith("grid-"):
+                    field_obj = self.process_field(grid)
+                    if field_obj:
+                        self.all_items.append(field_obj)
+                    continue
+                
                 self.add_breadcrumb(grid_name)
                 
                 # Handle grid iterations differently (they can contain repeating fields)
@@ -302,36 +326,41 @@ class OrbeonParser:
             # Check if field is bound to an input
             field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
             
-            # Special handling for control elements with text content
-            if field_name.startswith("control-"):
-                # Check if it's an explanation element
-                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
-                if explanation_elem is not None:
-                    field_type = "text-info"
-                    # Get text content from form resources
-                    text_ref = explanation_elem.find(".//fr:text", self.namespaces)
-                    if text_ref is not None:
-                        # Extract the reference path
-                        ref_path = text_ref.get("ref")
-                        if ref_path and ref_path.startswith("$form-resources/"):
-                            # Remove the $form-resources/ prefix
-                            ref_path = ref_path[len("$form-resources/"):]
-                            # Find the text in form resources
-                            resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
-                            if resource_text is not None:
-                                field_value = resource_text.text
-                elif form_instance_elem is not None or text_elem is not None:
-                    field_type = "text-info"
-                    field_value = form_instance_elem.text if form_instance_elem is not None else text_elem.text
+            # Special handling for explanation fields
+            explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+            if explanation_elem is not None:
+                field_type = "text-info"
+                # Get text content from form resources
+                text_ref = explanation_elem.find(".//fr:text", self.namespaces)
+                if text_ref is not None:
+                    # Extract the reference path
+                    ref_path = text_ref.get("ref")
+                    if ref_path and ref_path.startswith("$form-resources/"):
+                        # Remove the $form-resources/ prefix
+                        ref_path = ref_path[len("$form-resources/"):]
+                        # Find the text in form resources
+                        resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
+                        if resource_text is not None:
+                            field_value = resource_text.text
             
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
-            # Process dropdown options if needed
-            if field_type == "dropdown":
-                options = self.extract_dropdown_options(field_elem)
-                if options:
-                    field_obj["listItems"] = options
+            # Process dropdown or radio options
+            if field_type == "dropdown" or field_type == "radio":
+                # Special handling for formReady field
+                if field_name == "formReady":
+                    field_obj["listItems"] = [
+                        {"text": "Yes", "value": "true", "name": "Yes"},
+                        {"text": "No", "value": "false", "name": "No"}
+                    ]
+                    # Convert boolean string to actual value
+                    if field_value is not None:
+                        field_obj["value"] = field_value.lower() == "true"
+                else:
+                    options = self.extract_dropdown_options(field_elem)
+                    if options:
+                        field_obj["listItems"] = options
             
             # Process checkbox value
             if field_type == "checkbox":
@@ -346,20 +375,7 @@ class OrbeonParser:
             # Process date validation
             if field_type == "date":
                 # Add specific validation rules based on field name
-                if "birth" in field_name.lower():
-                    field_obj["validation"].extend([
-                        {
-                            "type": "maxDate",
-                            "value": "2024-09-01",
-                            "errorMessage": "Date should be less than September 1st 2024 due to legislation"
-                        },
-                        {
-                            "type": "minDate",
-                            "value": "2000-01-01",
-                            "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
-                        }
-                    ])
-                elif "signed" in field_name.lower():
+                if "signed" in field_name.lower():
                     field_obj["validation"].extend([
                         {
                             "type": "maxDate",
@@ -384,6 +400,10 @@ class OrbeonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
+            # Skip grid elements
+            if field_name.startswith("grid-"):
+                return None
+            
             # Check mapping first
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
@@ -392,17 +412,42 @@ class OrbeonParser:
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
             
+            # Check if field is formReady (special case for boolean field that should be a radio)
+            if field_name == "formReady":
+                return "radio"
+            
+            # Check if field has an explanation element
+            explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+            if explanation_elem is not None:
+                return "text-info"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
-                # First check if it's an explanation element
-                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
-                if explanation_elem is not None:
-                    return "text-info"
-                
                 # Then check directly in the field element
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
+                
+                # Check if it's a radio button by looking for items with labels and values
+                # First check in the field element itself
+                items = self.form_instance.findall(f".//{field_name}/item", self.namespaces)
+                if items:
+                    for item in items:
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and value is not None:
+                            return "radio"
+                
+                # If not found in field element, check in form resources
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    items = control_elem.findall(".//item", self.namespaces)
+                    if items:
+                        for item in items:
+                            label = item.find("label", self.namespaces)
+                            value = item.find("value", self.namespaces)
+                            if label is not None and value is not None:
+                                return "radio"
             
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
@@ -530,7 +575,6 @@ class OrbeonParser:
                 "type": "text-info",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -543,7 +587,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -561,7 +604,6 @@ class OrbeonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -578,7 +620,6 @@ class OrbeonParser:
                 "id": self.next_id(),
                 "fieldId": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "placeholder": None,
                 "mask": "yyyy-MM-dd",
                 "codeContext": {
@@ -593,7 +634,6 @@ class OrbeonParser:
                 "type": "checkbox",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "webStyles": None,
                 "pdfStyles": None,
                 "mask": None,
@@ -609,7 +649,6 @@ class OrbeonParser:
                 "type": "radio",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -628,7 +667,6 @@ class OrbeonParser:
                 "size": "md",
                 "type": "dropdown",
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "isMulti": False,
                 "isInline": False,
@@ -649,7 +687,6 @@ class OrbeonParser:
                 "type": "signature",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -664,7 +701,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -682,7 +718,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": "(###) ###-####",
                 "codeContext": {
@@ -700,7 +735,6 @@ class OrbeonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -716,7 +750,6 @@ class OrbeonParser:
                 "type": "file",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -768,7 +801,24 @@ class OrbeonParser:
         """Extract dropdown options from field element"""
         try:
             options = []
-            # Look for items in the resources instance
+            
+            # First check if the field element has items directly in the form instance
+            field_instance = self.form_instance.find(f".//{field_elem.tag}", self.namespaces)
+            if field_instance is not None:
+                items = field_instance.findall("item", self.namespaces)
+                if items:
+                    for item in items:
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text:
+                            options.append({
+                                "text": label.text.strip(),
+                                "value": value.text.strip() if value is not None and value.text else label.text.strip(),
+                                "name": value.text.strip() if value is not None and value.text else label.text.strip()
+                            })
+                    return options
+            
+            # If no items found in form instance, look in the resources instance
             resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
             if resources is not None:
                 # Find the field's resource section
