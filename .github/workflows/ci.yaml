@@ -27,10 +27,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
-      # - name: Run Python test suite
-      #   run: |
-      #     pytest tests/test_converters.py --maxfail=2 --disable-warnings -v
+      - name: Run Orbeon parser tests
+        run: |
+          pytest tests/test_orbeon_converter.py --maxfail=2 --disable-warnings -v
 
+      - name: Run XDP parser tests
+        run: |
+          pytest tests/test_xml_converter.py --maxfail=2 --disable-warnings -v
+          
   helm-lint:
     runs-on: ubuntu-latest
     steps:
