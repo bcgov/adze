@@ -31,7 +31,7 @@ jobs:
       - name: Login to OpenShift (Test)
         env:
           OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
-          OPENSHIFT_TOKEN_TEST: ${{ secrets.OPENSHIFT_TOKEN_TEST }}
+          OPENSHIFT_TOKEN_TEST: ${{ secrets.OPENSHIFT_TOKEN }}
         run: |
           oc login $OPENSHIFT_SERVER --token=$OPENSHIFT_TOKEN_TEST --insecure-skip-tls-verify
           oc project c79ac4-test

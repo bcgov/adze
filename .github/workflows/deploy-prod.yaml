@@ -30,7 +30,7 @@ jobs:
 
       - name: Login to OpenShift (Prod)
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN_PROD }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
       - name: Deploy using Helm (Prod)
         run: |
