@@ -1,7 +1,7 @@
 # XML to JSON Converter
 
 ## 📖 Overview
-The **XML to JSON Converter** is a command-line tool designed to convert XFA-based XML forms and Oberon XML forms into JSON format. It supports **single file conversion** as well as **batch processing** of multiple XML files.
+The **XML to JSON Converter** is a command-line tool designed to convert XFA-based XML forms and Orbeon XML forms into JSON format. It supports **single file conversion** as well as **batch processing** of multiple XML files.
 
 ---
 
@@ -55,18 +55,18 @@ python xdp_converter_cli.py
 
 ---
 
-## 🚀 Running the Oberon XML Converter
+## 🚀 Running the Orbeon XML Converter
 
-The Oberon converter is a separate tool specifically designed to convert Orbeon Forms XML (Oberon) to JSON:
+The Orbeon converter is a separate tool specifically designed to convert Orbeon Forms XML to JSON:
 
 ### **Using the CLI tool**
 
 ```sh
-python src/oberon_converter_cli.py -i /path/to/input.xml [-m /path/to/mapping.json] [-o /path/to/output.json] [-v]
+python src/orbeon_converter_cli.py -i /path/to/input.xml [-m /path/to/mapping.json] [-o /path/to/output.json] [-v]
 ```
 
 **Options:**
-- `-i, --input`: Path to input Oberon XML file (required)
+- `-i, --input`: Path to input Orbeon XML file (required)
 - `-m, --mapping`: Path to XML field mapping file (defaults to xml_mapping.json in project root)
 - `-o, --output`: Path to output JSON file (defaults to auto-generated filename in the output directory)
 - `-v, --verbose`: Enable verbose output
@@ -76,7 +76,7 @@ python src/oberon_converter_cli.py -i /path/to/input.xml [-m /path/to/mapping.js
 For a quick test with the sample CF2160.xml file:
 
 ```sh
-python test_oberon_converter.py
+python test_orbeon_converter.py
 ```
 
 ---
@@ -115,7 +115,7 @@ The report is saved in the **report directory**.
 This tool supports two types of XML form formats:
 
 1. **XFA-based XML/XDP Forms** - Forms created with Adobe LiveCycle/AEM Forms
-2. **Oberon XML Forms** - Forms created with Orbeon Forms Platform
+2. **Orbeon XML Forms** - Forms created with Orbeon Forms Platform
 
 Both formats are converted to a standardized JSON structure that can be used by modern frontend applications.
 

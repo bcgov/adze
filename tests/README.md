@@ -1,7 +1,7 @@
 # XML-JSON Converter Test Suite Documentation
 
 ## Overview
-This test suite provides comprehensive testing for both the Oberon and XDP XML parsers. The tests ensure proper functionality of XML parsing, field type determination, field creation, and complete XML to JSON conversion.
+This test suite provides comprehensive testing for both the Orbeon and XDP XML parsers. The tests ensure proper functionality of XML parsing, field type determination, field creation, and complete XML to JSON conversion.
 
 ## Test Structure
 
@@ -10,15 +10,15 @@ This test suite provides comprehensive testing for both the Oberon and XDP XML p
 - `tearDown()`: Cleans up test files after each test
 
 ### Test Files
-- `test_oberon.xml`: Sample Oberon XML file with form fields
+- `test_orbeon.xml`: Sample Orbeon XML file with form fields
 - `test_xdp.xml`: Sample XDP XML file with form fields
 - `test_mapping.json`: Configuration file for field mappings
 
 ## Test Cases
 
 ### Parser Initialization Tests
-1. `test_oberon_parser_initialization`
-   - Verifies proper initialization of OberonParser
+1. `test_orbeon_parser_initialization`
+   - Verifies proper initialization of OrbeonParser
    - Checks XML file loading, mapping file loading, and form instance detection
 
 2. `test_xdp_parser_initialization`
@@ -26,7 +26,7 @@ This test suite provides comprehensive testing for both the Oberon and XDP XML p
    - Checks XML file loading, mapping file loading, and root subform detection
 
 ### Field Type Determination Tests
-1. `test_oberon_field_type_determination`
+1. `test_orbeon_field_type_determination`
    - Tests correct field type detection for:
      - Text info fields (control-476)
      - Text input fields
@@ -38,7 +38,7 @@ This test suite provides comprehensive testing for both the Oberon and XDP XML p
      - Date fields
 
 ### Field Creation Tests
-1. `test_oberon_field_creation`
+1. `test_orbeon_field_creation`
    - Verifies proper creation of:
      - Text info fields with values
      - Text input fields with values
@@ -49,7 +49,7 @@ This test suite provides comprehensive testing for both the Oberon and XDP XML p
      - Date fields with masks and labels
 
 ### Full Conversion Tests
-1. `test_oberon_parser_full_conversion`
+1. `test_orbeon_parser_full_conversion`
    - Tests complete XML to JSON conversion
    - Verifies presence of all required fields
    - Checks field values and types

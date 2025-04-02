@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Test script for OberonParser class.
-This script demonstrates how to use the OberonParser to convert an Oberon XML file to JSON.
+Test script for OrbeonParser class.
+This script demonstrates how to use the OrbeonParser to convert an Orbeon XML file to JSON.
 
 Usage:
-    python test_oberon_converter.py
+    python test_orbeon_converter.py
 """
 
 import os
 import json
-from src.oberon_converter_class import OberonParser
+from src.orbeon_converter_class import OrbeonParser
 
 def main():
     # Define paths
@@ -33,7 +33,7 @@ def main():
     
     try:
         # Initialize parser
-        parser = OberonParser(input_file, mapping_file)
+        parser = OrbeonParser(input_file, mapping_file)
         
         # Parse the XML file
         output_json = parser.parse()

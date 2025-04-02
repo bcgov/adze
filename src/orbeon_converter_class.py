@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from src.report import Report
 
-class OberonParser:
+class OrbeonParser:
     def __init__(self, xml_filename, mapping_file=None):
         try:
             self.xml_filename = xml_filename
@@ -32,14 +32,14 @@ class OberonParser:
             self.tree = ET.parse(xml_filename)
             self.root = self.tree.getroot()
             
-            # Get form instance - the main data container in Oberon
+            # Get form instance - the main data container in Orbeon
             self.form_instance = self.root.find(".//xf:instance[@id='fr-form-instance']", self.namespaces)
             if self.form_instance is None:
-                raise ValueError("Form instance not found in Oberon XML")
+                raise ValueError("Form instance not found in Orbeon XML")
                 
             self.form_data = self.form_instance.find(".//form", self.namespaces)
             if self.form_data is None:
-                raise ValueError("Form data not found in Oberon XML")
+                raise ValueError("Form data not found in Orbeon XML")
 
             # Find bind elements for additional metadata
             self.form_binds = self.root.find(".//xf:bind[@id='fr-form-binds']", self.namespaces)
@@ -50,14 +50,14 @@ class OberonParser:
             # Get form resources for labels
             self.form_resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
             if self.form_resources is None:
-                raise ValueError("Form resources not found in Oberon XML")
+                raise ValueError("Form resources not found in Orbeon XML")
 
             # Output JSON structure
             self.output_json = self.create_output_structure()
             self.all_items = []
             self.Report = Report(xml_filename)
         except Exception as e:
-            print(f"Error initializing OberonParser: {e}")
+            print(f"Error initializing OrbeonParser: {e}")
             raise
     
     def extract_binds(self, bind_element, parent_path=""):

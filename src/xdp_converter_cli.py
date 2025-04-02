@@ -15,7 +15,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from src.filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR, generate_filename
-from src.oberon_converter_class import OberonParser
+from src.orbeon_converter_class import OrbeonParser
 from src.xml_converter import XDPConverter
 import platform
 
@@ -84,7 +84,7 @@ def convert_xml_to_json(input_path, mapping_path, output_path=None):
     try:
         # Initialize parser
         logger.info(f"Initializing parser for {input_path}")
-        parser = OberonParser(input_path, mapping_path)
+        parser = OrbeonParser(input_path, mapping_path)
         
         # Parse the XML file
         logger.info("Parsing XML file...")

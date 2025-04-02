@@ -5,7 +5,7 @@ import os
 import sys
 import logging
 from datetime import datetime
-from oberon_converter_class import OberonParser
+from orbeon_converter_class import OrbeonParser
 from filename_generator import generate_filename
 
 # Configure logging
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Convert Oberon XML form files to JSON')
-    parser.add_argument('-i', '--input', help='Path to input Oberon XML file', required=True)
+    parser = argparse.ArgumentParser(description='Convert Orbeon XML form files to JSON')
+    parser.add_argument('-i', '--input', help='Path to input Orbeon XML file', required=True)
     parser.add_argument('-m', '--mapping', help='Path to XML field mapping file (defaults to xml_mapping.json in project root)', required=False)
     parser.add_argument('-o', '--output', help='Path to output JSON file (defaults to auto-generated filename in the output directory)', required=False)
     parser.add_argument('-v', '--verbose', help='Enable verbose output', action='store_true')
@@ -48,11 +48,11 @@ def validate_mapping_file(mapping_path):
     return True
 
 def convert_xml_to_json(input_path, mapping_path, output_path=None):
-    """Convert Oberon XML to JSON"""
+    """Convert Orbeon XML to JSON"""
     try:
         # Initialize parser
         logger.info(f"Initializing parser for {input_path}")
-        parser = OberonParser(input_path, mapping_path)
+        parser = OrbeonParser(input_path, mapping_path)
         
         # Parse the XML file
         logger.info("Parsing XML file...")
