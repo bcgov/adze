@@ -21,7 +21,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 environment:
-  name: dev
+  name: test
   appMode: web
   debug: true
 
