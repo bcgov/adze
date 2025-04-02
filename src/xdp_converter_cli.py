@@ -116,6 +116,10 @@ def convert_xdp_to_json(input_path, mapping_path, output_path=None):
         logger.info(f"Initializing converter for {input_path}")
         converter = XDPConverter(mapping_path)
         
+        # Generate output path if not provided
+        if output_path is None:
+            output_path = generate_filename(input_path, "output")
+        
         # Process the XDP file
         logger.info("Processing XDP file...")
         success = converter.process_file(input_path, output_path)
@@ -124,7 +128,7 @@ def convert_xdp_to_json(input_path, mapping_path, output_path=None):
             logger.error("Failed to process XDP file")
             return False
         
-        logger.info(f"Conversion completed successfully! Output saved to {output_path or 'auto-generated path'}")
+        logger.info(f"Conversion completed successfully! Output saved to {output_path}")
         return True
     except Exception as e:
         logger.error(f"Error converting XDP to JSON: {e}")
@@ -147,8 +151,7 @@ def run_conversion():
         success = convert_xml_to_json(file_path, None, None)
     else:
         # Use XDP converter for XDP files
-        output_path = os.path.join(output_dir, os.path.splitext(os.path.basename(file_path))[0] + '.json')
-        success = convert_xdp_to_json(file_path, None, output_path)
+        success = convert_xdp_to_json(file_path, None, None)
 
     time.sleep(1)  
 

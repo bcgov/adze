@@ -462,7 +462,7 @@ class XDPParser:
     
     def process_draw(self, draw):
         try:
-            """Process a draw element (usually text display)"""
+            """Process a draw element (usually text display or image)"""
             draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
             
             # Track breadcrumb for mapping lookup
@@ -471,6 +471,31 @@ class XDPParser:
             
             # Find mapping configuration for this draw element
             mapping = self.find_mapping_for_path(current_path)
+            
+            # Check for image content first
+            image_elem = draw.find(".//template:value/template:image", self.namespaces)
+            if image_elem is not None and image_elem.attrib.get("contentType", "").startswith("image/"):
+                # Create image field object
+                field_obj = {
+                    "type": "image",
+                    "id": self.next_id(),
+                    "label": None,
+                    "styles": None,
+                    "codeContext": {
+                        "name": None
+                    },
+                    "contentType": image_elem.attrib.get("contentType"),
+                    "value": image_elem.text if image_elem.text else None
+                }
+                
+                # Apply any additional mapping properties
+                if mapping:
+                    if mapping.get("styles"):
+                        field_obj["styles"] = mapping.get("styles")
+                
+                self.Report.report_success(draw_name, 'image', None)
+                self.remove_breadcrumb(draw_name)
+                return field_obj
             
             # Get text content if available
             text_value = None
