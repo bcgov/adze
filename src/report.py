@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from filename_generator import generate_filename
+from src.filename_generator import generate_filename
 
 # ✅ Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
