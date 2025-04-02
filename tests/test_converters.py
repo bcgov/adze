@@ -1,15 +1,25 @@
 import unittest
 import os
 import json
+import sys
 import xml.etree.ElementTree as ET
+
+# Add the parent directory to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.orbeon_converter_class import OrbeonParser
 from src.xml_converter_class import XDPParser
 
 class TestConverters(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
+        # Get the current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Move up one level to project root
+        project_root = os.path.dirname(current_dir)
+        
         # Create test data directory if it doesn't exist
-        self.test_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tests', 'test_data')
+        self.test_data_dir = os.path.join(project_root, "test_data")
         os.makedirs(self.test_data_dir, exist_ok=True)
         
         # Set paths for test files
@@ -58,6 +68,28 @@ class TestConverters(unittest.TestCase):
                                 </grid-1>
                             </section-a>
                         </form>
+                    </xf:instance>
+                    <xf:instance id="fr-form-resources">
+                        <resources>
+                            <resource xml:lang="en">
+                                <control-476>
+                                    <label>Test Control</label>
+                                </control-476>
+                                <text-input-field>
+                                    <label>Text Input Field</label>
+                                </text-input-field>
+                                <date-field>
+                                    <label>Date Field</label>
+                                </date-field>
+                                <dropdown-field>
+                                    <label>Dropdown Field</label>
+                                    <item>
+                                        <label>Option 1</label>
+                                        <value>option1</value>
+                                    </item>
+                                </dropdown-field>
+                            </resource>
+                        </resources>
                     </xf:instance>
                     <xf:bind id="fr-form-binds">
                         <xf:bind id="text-input-field-bind" ref="text-input-field" name="Text Input Field"/>
