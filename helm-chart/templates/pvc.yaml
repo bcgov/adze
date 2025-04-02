@@ -9,4 +9,6 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.size }}
+  volumeMode: Filesystem
+  storageClassName: ""
 {{- end }}
