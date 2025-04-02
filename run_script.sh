@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+cd "$(dirname "$0")"
 # improved_run_script.sh - Cross-platform Python dependency installer and XDP converter runner
 
 # Hard-coded requirements file

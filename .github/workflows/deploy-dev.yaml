@@ -1,4 +1,4 @@
-name: Deploy to OpenShift
+name: Deploy to Dev (Dev)
 
 on:
   push:
@@ -6,31 +6,68 @@ on:
       - dev
 
 jobs:
-  deploy:
+  deploy-dev:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install OpenShift CLI
-        run: |
-          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
-          tar -xvf oc.tar.gz
-          sudo mv oc /usr/local/bin
-          oc version
+      - name: Extract Git SHA
+        id: vars
+        run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Install Helm
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            jiminaot/xml-json-converter:latest
+            jiminaot/xml-json-converter:${{ env.SHORT_SHA }}
+          platforms: linux/amd64
+
+      - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.14.0
 
-      - name: Login to OpenShift
+      - name: Install OpenShift CLI (oc)
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+          tar -xzf oc.tar.gz
+          sudo mv oc /usr/local/bin
 
-      - name: Deploy to OpenShift (Dev)
+      - name: Login to OpenShift (Dev)
+        env:
+          OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
+          OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+        run: |
+          oc login $OPENSHIFT_SERVER --token=$OPENSHIFT_TOKEN --insecure-skip-tls-verify
+          oc project ${{ secrets.OPENSHIFT_NAMESPACE_DEV }}
+
+      - name: Deploy using Helm (Dev)
         run: |
           helm upgrade --install adze-dev ./helm-chart \
-            --namespace ${{ secrets.OPENSHIFT_NAMESPACE }} \
+            --namespace ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} \
+            --set image.tag=${{ env.SHORT_SHA }} \
             -f helm-chart/values-dev.yaml
+
+      - name: Wait for pod to become ready
+        run: |
+          sleep 10
+          until oc get pods -n ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} -l app.kubernetes.io/name=adze \
+            -o jsonpath='{.items[0].status.containerStatuses[0].ready}' | grep true; do
+            echo "⏳ Waiting for pod readiness..."
+            sleep 5
+          done

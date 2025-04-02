@@ -1,0 +1,11 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: adze-scan-run-
+spec:
+  pipelineRef:
+    name: adze-integration-pipeline
+  params:
+    - name: image-url
+      value: jiminaot/xml-json-converter:latest
+  serviceAccountName: pipeline

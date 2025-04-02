@@ -1,0 +1,23 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: sysdig-inline-scan
+spec:
+  params:
+    - name: image-url
+      type: string
+  steps:
+    - name: inline-scan
+      image: sysdig/secure-inline-scan
+      env:
+        - name: SYS_DIG_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sysdig-api-secret
+              key: token
+      script: |
+        #!/bin/sh
+        echo "🔍 Running Sysdig Inline Scan for image: $(params.image-url)"
+        ./inline_scan.sh --sysdig-url https://secure.sysdig.com \
+                         --api-token $SYS_DIG_TOKEN \
+                         $(params.image-url)

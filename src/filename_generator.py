@@ -21,7 +21,9 @@ def generate_filename(xml_filename, file_type):
     Returns:
         str: Full path to the generated file.
     """
-    safe_filename = os.path.splitext(os.path.basename(xml_filename))[0]  # Remove extension
+    # Get filename without extension and extension separately
+    base_name = os.path.splitext(os.path.basename(xml_filename))[0]  # Remove extension
+    input_ext = os.path.splitext(os.path.basename(xml_filename))[1].lower().replace('.', '')  # Get extension without dot
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # YYYYMMDD_HHMMSS
 
     if file_type == "report":
@@ -32,4 +34,4 @@ def generate_filename(xml_filename, file_type):
         raise ValueError("Invalid file type. Must be 'report' or 'output'.")
 
     os.makedirs(directory, exist_ok=True)  # Ensure directory exists
-    return str(PurePosixPath(directory, f"{safe_filename}_{file_type}_{timestamp}.json"))
+    return str(PurePosixPath(directory, f"{base_name}_{input_ext}_{file_type}_{timestamp}.json"))

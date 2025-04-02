@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from report import Report
+from src.report import Report
 
 class OberonParser:
     def __init__(self, xml_filename, mapping_file=None):
@@ -46,6 +46,11 @@ class OberonParser:
             self.binds_map = {}
             if self.form_binds is not None:
                 self.extract_binds(self.form_binds)
+
+            # Get form resources for labels
+            self.form_resources = self.root.find(".//xf:instance[@id='fr-form-resources']", self.namespaces)
+            if self.form_resources is None:
+                raise ValueError("Form resources not found in Oberon XML")
 
             # Output JSON structure
             self.output_json = self.create_output_structure()
@@ -268,7 +273,19 @@ class OberonParser:
         try:
             """Process a field element"""
             field_name = field_elem.tag
-            field_value = field_elem.text
+            field_value = None
+            
+            # For text-info fields, first check form instance for text content
+            form_instance_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
+            if form_instance_elem is not None:
+                field_value = form_instance_elem.text
+            else:
+                # Then check the field element itself
+                text_elem = field_elem.find(".//text", self.namespaces)
+                if text_elem is not None:
+                    field_value = text_elem.text
+                else:
+                    field_value = field_elem.text
             
             # Track breadcrumb for mapping lookup
             self.add_breadcrumb(field_name)
@@ -284,6 +301,28 @@ class OberonParser:
             
             # Check if field is bound to an input
             field_type = self.determine_field_type(field_name, field_value, field_attributes, mapping)
+            
+            # Special handling for control elements with text content
+            if field_name.startswith("control-"):
+                # Check if it's an explanation element
+                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+                if explanation_elem is not None:
+                    field_type = "text-info"
+                    # Get text content from form resources
+                    text_ref = explanation_elem.find(".//fr:text", self.namespaces)
+                    if text_ref is not None:
+                        # Extract the reference path
+                        ref_path = text_ref.get("ref")
+                        if ref_path and ref_path.startswith("$form-resources/"):
+                            # Remove the $form-resources/ prefix
+                            ref_path = ref_path[len("$form-resources/"):]
+                            # Find the text in form resources
+                            resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
+                            if resource_text is not None:
+                                field_value = resource_text.text
+                elif form_instance_elem is not None or text_elem is not None:
+                    field_type = "text-info"
+                    field_value = form_instance_elem.text if form_instance_elem is not None else text_elem.text
             
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
@@ -345,12 +384,37 @@ class OberonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
+            # Check mapping first
+            if mapping and mapping.get("fieldType"):
+                return mapping.get("fieldType")
+            
+            # Check if field is a control with text tag
+            if field_name.startswith("control-"):
+                # First check if it's an explanation element
+                explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
+                if explanation_elem is not None:
+                    return "text-info"
+                
+                # Then check directly in the field element
+                text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
+                if text_elem is not None:
+                    return "text-info"
+            
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
             if bind_elem is not None:
-                # Check for select1 elements (dropdowns)
+                # Check for checkbox-input elements first
+                checkbox_input_elem = self.root.find(f".//fr:checkbox-input[@bind='{field_name}-bind']", self.namespaces)
+                if checkbox_input_elem is not None:
+                    return "checkbox"
+                
+                # Check for select1 elements (dropdowns or radio buttons)
                 select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
                 if select1_elem is not None:
+                    # Check if it's a radio button group
+                    appearance = select1_elem.get("appearance", "")
+                    if appearance == "full":
+                        return "radio"
                     return "dropdown"
                 
                 # Check for textarea elements
@@ -368,14 +432,38 @@ class OberonParser:
                 if currency_elem is not None:
                     return "currency"
                 
-                # Check for checkbox elements
+                # Check for checkbox elements - look for both input and checkbox elements
                 checkbox_elem = self.root.find(f".//xf:input[@bind='{field_name}-bind']", self.namespaces)
-                if checkbox_elem is not None and checkbox_elem.get("type") == "checkbox":
+                if checkbox_elem is not None:
+                    # Check if it's a checkbox by looking at type or appearance
+                    if checkbox_elem.get("type") == "checkbox" or checkbox_elem.get("appearance") == "checkbox":
+                        return "checkbox"
+                
+                # Also check for checkbox elements in the form instance
+                checkbox_instance = self.form_instance.find(f".//{field_name}", self.namespaces)
+                if checkbox_instance is not None and checkbox_instance.get("type") == "checkbox":
                     return "checkbox"
             
             # Check if field is a resource
             if field_name.startswith("control-") and field_value is None:
-                return "resource"
+                # Check if the resource has a text tag
+                text_elem = self.form_instance.find(f".//form//{field_name}/text", self.namespaces)
+                if text_elem is not None:
+                    return "text-info"
+                # If no text tag, treat as text-input
+                return "text-input"
+            
+            # Check for date fields by name
+            if any(date_indicator in field_name.lower() for date_indicator in ['date', 'birth', 'signed']):
+                return "date"
+            
+            # Check for phone number fields
+            if any(phone_indicator in field_name.lower() for phone_indicator in ['phone', 'tel', 'mobile', 'cell']):
+                return "phone"
+            
+            # Check for email fields
+            if any(email_indicator in field_name.lower() for email_indicator in ['email', 'mail', 'e-mail']):
+                return "email"
             
             # Default to text input
             return "text-input"
@@ -387,12 +475,58 @@ class OberonParser:
         """Create field object based on field type"""
         field_obj = None
         
+        # Get bind information for validation and label
+        bind_info = self.get_bind_info(field_name)
+        validation_rules = []
+        
+        # Extract validation rules from bind info
+        if bind_info and 'attributes' in bind_info:
+            bind_attrs = bind_info['attributes']
+            
+            # Handle required validation
+            if bind_attrs.get('required') == 'true()':
+                validation_rules.append({
+                    "type": "required",
+                    "value": True,
+                    "errorMessage": bind_attrs.get('xxf:required-message', "This field is required")
+                })
+            
+            # Handle pattern validation
+            if 'pattern' in bind_attrs:
+                validation_rules.append({
+                    "type": "pattern",
+                    "value": bind_attrs['pattern'],
+                    "errorMessage": bind_attrs.get('xxf:pattern-message', "Invalid format")
+                })
+            
+            # Handle min/max validation
+            if 'min' in bind_attrs:
+                validation_rules.append({
+                    "type": "min",
+                    "value": bind_attrs['min'],
+                    "errorMessage": bind_attrs.get('xxf:min-message', f"Value must be at least {bind_attrs['min']}")
+                })
+            if 'max' in bind_attrs:
+                validation_rules.append({
+                    "type": "max",
+                    "value": bind_attrs['max'],
+                    "errorMessage": bind_attrs.get('xxf:max-message', f"Value must be at most {bind_attrs['max']}")
+                })
+        
+        # Get label and hint from form resources
+        label = self.get_field_label(field_name)
+        hint = self.get_field_hint(field_name)
+        
+        # Fallback to bind info or formatted field name if no label found
+        if not label:
+            label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
+        
         if field_type == "text-info":
             field_obj = {
                 "type": "text-info",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -405,8 +539,8 @@ class OberonParser:
             field_obj = {
                 "type": "text-input",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -418,25 +552,14 @@ class OberonParser:
             }
             if field_value:
                 field_obj["value"] = field_value
-        elif field_type == "resource":
-            field_obj = {
-                "type": "resource",
-                "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "codeContext": {
-                    "name": field_name
-                },
-                "filename": field_attributes.get("filename", ""),
-                "mediatype": field_attributes.get("mediatype", ""),
-                "size": field_attributes.get("size", ""),
-                "value": field_value
-            }
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "text-area":
             field_obj = {
                 "type": "text-area",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -446,21 +569,15 @@ class OberonParser:
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "date":
-            # Default date validation rules
-            validation_rules = [
-                {
-                    "type": "required",
-                    "value": True,
-                    "errorMessage": "Date should be submitted"
-                }
-            ]
-            
             field_obj = {
                 "type": "date",
                 "id": self.next_id(),
                 "fieldId": self.next_id(),
-                "label": self.format_field_name(field_name),
+                "label": label,
+                "helpText": hint,
                 "placeholder": None,
                 "mask": "yyyy-MM-dd",
                 "codeContext": {
@@ -474,7 +591,8 @@ class OberonParser:
             field_obj = {
                 "type": "checkbox",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
+                "label": label,
+                "helpText": hint,
                 "helperText": "",
                 "webStyles": None,
                 "pdfStyles": None,
@@ -484,16 +602,36 @@ class OberonParser:
                 },
                 "value": field_value == "true" if field_value is not None else False
             }
+            if validation_rules:
+                field_obj["validation"] = validation_rules
+        elif field_type == "radio":
+            field_obj = {
+                "type": "radio",
+                "id": self.next_id(),
+                "label": label,
+                "helpText": hint,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "listItems": [],
+                "helperText": None,
+                "direction": "vertical"
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "dropdown":
             field_obj = {
                 "id": self.next_id(),
                 "mask": None,
                 "size": "md",
                 "type": "dropdown",
-                "label": self.format_field_name(field_name),
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "isMulti": False,
-                "helpText": None,
                 "isInline": False,
                 "direction": "bottom",
                 "listItems": [],
@@ -504,16 +642,16 @@ class OberonParser:
                 "placeholder": "",
                 "selectionFeedback": "top-after-reopen"
             }
-            
-            # Add value if present
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "signature":
             field_obj = {
                 "type": "signature",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -521,12 +659,14 @@ class OberonParser:
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "email":
             field_obj = {
                 "type": "text-input",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -538,12 +678,14 @@ class OberonParser:
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "phone":
             field_obj = {
                 "type": "text-input",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "mask": "(###) ###-####",
                 "codeContext": {
@@ -555,12 +697,14 @@ class OberonParser:
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         elif field_type == "address":
             field_obj = {
                 "type": "text-area",
                 "id": self.next_id(),
-                "label": self.format_field_name(field_name),
-                "helpText": None,
+                "label": label,
+                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -570,13 +714,19 @@ class OberonParser:
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
+            if validation_rules:
+                field_obj["validation"] = validation_rules
         
         # Apply any additional mappings
         if mapping:
             if mapping.get("required"):
                 field_obj["required"] = mapping.get("required")
             if mapping.get("validation"):
-                field_obj["validation"] = mapping.get("validation")
+                # Merge validation rules from mapping with existing ones
+                if "validation" in field_obj:
+                    field_obj["validation"].extend(mapping.get("validation", []))
+                else:
+                    field_obj["validation"] = mapping.get("validation", [])
             if mapping.get("label"):
                 field_obj["label"] = mapping.get("label")
             if mapping.get("helpText"):
@@ -620,4 +770,38 @@ class OberonParser:
             return options
         except Exception as e:
             print(f"Error extracting dropdown options: {e}")
-            return [] 
+            return []
+
+    def get_field_label(self, field_name):
+        """Extract label from form resources"""
+        try:
+            # Find the field's resource section
+            field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
+            if field_resource is not None:
+                # Look for label element
+                label_elem = field_resource.find("label", self.namespaces)
+                if label_elem is not None and label_elem.text:
+                    # If label contains HTML, extract text content
+                    if "<div>" in label_elem.text:
+                        # Remove HTML tags and get text content
+                        import re
+                        text = re.sub('<[^<]+?>', '', label_elem.text)
+                        return text.strip()
+                    return label_elem.text.strip()
+            return None
+        except Exception as e:
+            print(f"Error getting field label for {field_name}: {e}")
+            return None
+
+    def get_field_hint(self, field_name):
+        """Extract hint from form resources"""
+        try:
+            field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
+            if field_resource is not None:
+                hint_elem = field_resource.find("hint", self.namespaces)
+                if hint_elem is not None and hint_elem.text:
+                    return hint_elem.text.strip()
+            return None
+        except Exception as e:
+            print(f"Error getting field hint for {field_name}: {e}")
+            return None 

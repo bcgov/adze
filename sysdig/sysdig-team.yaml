@@ -1,0 +1,23 @@
+apiVersion: ops.gov.bc.ca/v1alpha1
+kind: SysdigTeam
+metadata:
+  name: c79ac4-sysdigteam
+  namespace: c79ac4-tools
+spec:
+  team:
+    description: The Sysdig Team for the OpenShift Project Set c79ac4
+    users:
+      - name: bojan.zimonja@gov.bc.ca
+        role: ROLE_TEAM_EDIT
+      - name: Robert.Seib@gov.bc.ca
+        role: ROLE_TEAM_STANDARD
+      - name: Johtaro.Yoshida@gov.bc.ca
+        role: ROLE_TEAM_READ
+      - name: david.okulski@gov.bc.ca
+        role: ROLE_TEAM_READ
+      - name: Sofia.Blaunshteyn@gov.bc.ca
+        role: ROLE_TEAM_READ
+      - name: jimin.byun@aot-technologies.com
+        role: ROLE_TEAM_EDIT
+      - name: jimin.byun@aot-technologies.com
+        role: ROLE_TEAM_EDIT

@@ -21,6 +21,7 @@ class XDPParser:
             self.id_counter = 1
             self.mapping = self.load_mapping_file()
             self.namespaces = None
+            self.javascript_section = {}  # Store JavaScript methods
 
             # Parse the XML file
             self.tree = ET.parse(xml_filename)
@@ -85,29 +86,60 @@ class XDPParser:
             }
             return namespaces
     
-    def add_breadcrumb(self, tag):
+    def add_breadcrumb(self, tag, element=None):
         try:
-            """Add element tag to breadcrumb path"""
-            self.breadcrumb += f"<{tag}>"
+            """Add element tag and attributes to breadcrumb path"""
+            # Add basic tag
+            tag_with_attrs = f"<{tag}"
+            
+            # Add relevant attributes if element is provided
+            if element is not None and hasattr(element, 'attrib'):
+                for key, value in element.attrib.items():
+                    # Only include certain relevant attributes
+                    if key in ['name', 'type', 'ref', 'shape', 'contentType']:
+                        # Remove namespace prefix from attribute if present
+                        key = key.split("}")[-1] if "}" in key else key
+                        tag_with_attrs += f" {key}=\"{value}\""
+            
+            tag_with_attrs += ">"
+            self.breadcrumb += tag_with_attrs
+            
+            # Keep breadcrumb from growing too large
             if len(self.breadcrumb) > 200:
-                self.breadcrumb = self.breadcrumb[-200:]
+                # Keep only the last 200 characters but ensure we don't break in middle of a tag
+                truncated = self.breadcrumb[-200:]
+                # Find first complete opening tag
+                first_tag = truncated.find("<")
+                if first_tag >= 0:
+                    self.breadcrumb = truncated[first_tag:]
         except Exception as e:
             print(f"Error adding breadcrumb: {e}")
     
     def remove_breadcrumb(self, tag):
         try:
             """Remove the last element tag from breadcrumb"""
-            tag_str = f"<{tag}>"
-            index = self.breadcrumb.rfind(tag_str)
-            if index != -1:
-                self.breadcrumb = self.breadcrumb[:index]
+            # Find the last occurrence of a tag that starts with the given name
+            last_index = -1
+            tag_start = f"<{tag}"
+            
+            # Look for the tag with any attributes
+            i = self.breadcrumb.rfind(tag_start)
+            while i >= 0:
+                tag_end = self.breadcrumb.find(">", i)
+                if tag_end >= 0:
+                    last_index = i
+                    break
+                i = self.breadcrumb.rfind(tag_start, 0, i)
+            
+            if last_index >= 0:
+                self.breadcrumb = self.breadcrumb[:last_index]
         except Exception as e:
             print(f"Error removing breadcrumb: {e}")
     
     def get_breadcrumb(self):
         try:
-            """Get current breadcrumb path"""
-            return self.breadcrumb
+            """Get current normalized breadcrumb path"""
+            return self.normalize_path(self.breadcrumb)
         except Exception as e:
             print(f"Error getting breadcrumb: {e}")
             return ""
@@ -122,12 +154,132 @@ class XDPParser:
             print(f"Error generating next ID: {e}")
             return str(uuid.uuid4())
     
-    def find_mapping_for_path(self, path):
+    def normalize_path(self, path):
+        """Normalize an XML path for comparison by removing extra spaces and normalizing separators"""
         try:
-            """Find mapping configuration for given path"""
+            # Remove extra whitespace
+            path = " ".join(path.split())
+            # Normalize separators to single angle brackets
+            path = path.replace("//", "/")
+            path = path.replace("><", ">/<")
+            # Remove any leading/trailing separators
+            path = path.strip("/<>")
+            return path
+        except Exception as e:
+            print(f"Error normalizing path: {e}")
+            return path
+
+    def path_similarity(self, path1, path2):
+        """Calculate similarity between two XML paths with improved hierarchy handling"""
+        try:
+            # Normalize both paths
+            path1 = self.normalize_path(path1)
+            path2 = self.normalize_path(path2)
+            
+            # Split paths into components
+            parts1 = path1.split("/")
+            parts2 = path2.split("/")
+            
+            # Calculate matching score with position weighting
+            matches = 0
+            total_weight = 0
+            max_length = max(len(parts1), len(parts2))
+            
+            # Compare each part with position-based weighting
+            for i in range(min(len(parts1), len(parts2))):
+                # Calculate position weight (later positions matter more)
+                position_weight = 1 + (i / max_length)
+                total_weight += position_weight
+                
+                # Extract tag and attributes
+                tag1, attrs1 = self.split_tag_and_attrs(parts1[i])
+                tag2, attrs2 = self.split_tag_and_attrs(parts2[i])
+                
+                # Compare tags
+                if tag1 == tag2:
+                    matches += position_weight
+                elif tag1.replace("template:", "") == tag2.replace("template:", ""):
+                    # Match without namespace
+                    matches += 0.9 * position_weight
+                elif tag1.split("[")[0] == tag2.split("[")[0]:
+                    # Match ignoring predicates
+                    matches += 0.8 * position_weight
+                
+                # Compare attributes if both have them
+                if attrs1 and attrs2:
+                    attr_match = self.compare_attributes(attrs1, attrs2)
+                    matches += 0.2 * position_weight * attr_match
+            
+            # Calculate final score
+            return matches / (total_weight if total_weight > 0 else 1)
+        except Exception as e:
+            print(f"Error calculating path similarity: {e}")
+            return 0
+
+    def split_tag_and_attrs(self, part):
+        """Split a path component into tag and attributes"""
+        try:
+            if " " not in part:
+                return part, {}
+            
+            tag = part.split(" ")[0]
+            attrs = {}
+            
+            # Extract attributes
+            for attr in part.split(" ")[1:]:
+                if "=" in attr:
+                    key, value = attr.split("=", 1)
+                    attrs[key] = value.strip('"\'')
+            
+            return tag, attrs
+        except Exception as e:
+            print(f"Error splitting tag and attributes: {e}")
+            return part, {}
+
+    def compare_attributes(self, attrs1, attrs2):
+        """Compare two sets of attributes and return a similarity score"""
+        try:
+            if not attrs1 or not attrs2:
+                return 0
+            
+            # Get all unique keys
+            all_keys = set(attrs1.keys()) | set(attrs2.keys())
+            if not all_keys:
+                return 0
+            
+            matches = 0
+            for key in all_keys:
+                if key in attrs1 and key in attrs2:
+                    if attrs1[key] == attrs2[key]:
+                        matches += 1
+                    elif attrs1[key].lower() == attrs2[key].lower():
+                        matches += 0.9
+            
+            return matches / len(all_keys)
+        except Exception as e:
+            print(f"Error comparing attributes: {e}")
+            return 0
+
+    def find_mapping_for_path(self, path):
+        """Find mapping configuration for given path using fuzzy matching"""
+        try:
+            best_match = None
+            best_score = 0.7  # Minimum similarity threshold
+            
             for mapping in self.mapping.get("mappings", []):
-                if path.endswith(mapping.get("xmlPath", "")):
-                    return mapping
+                xml_path = mapping.get("xmlPath", "")
+                score = self.path_similarity(path, xml_path)
+                
+                if score > best_score:
+                    best_score = score
+                    best_match = mapping
+            
+            if best_match:
+                # Log the fuzzy match for debugging
+                if best_score < 1.0:
+                    print(f"Fuzzy matched path '{path}' to mapping '{best_match['xmlPath']}' with score {best_score}")
+                return best_match
+                
             return None
         except Exception as e:
             print(f"Error finding mapping for path: {e}")
@@ -155,7 +307,9 @@ class XDPParser:
                 "title": None,
                 "form_id": form_id,
                 "deployed_to": None,
-                "dataSources": []
+                "dataSources": [],
+                "javascript": self.javascript_section,  # Add JavaScript section
+                "data": {"items": []}  # Initialize empty items array
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
@@ -167,7 +321,9 @@ class XDPParser:
                 "title": None,
                 "form_id": "FORM0001",
                 "deployed_to": None,
-                "dataSources": []
+                "dataSources": [],
+                "javascript": self.javascript_section,  # Add JavaScript section
+                "data": {"items": []}  # Initialize empty items array
             }
     
     def parse(self):
@@ -177,6 +333,9 @@ class XDPParser:
                 print("Root subform not found")
                 return None
                 
+            # Process global scripts first
+            self.process_global_scripts()
+            
             # Process all sections
             self.process_master_pages()
             self.process_root_elements()
@@ -184,14 +343,11 @@ class XDPParser:
             # Add items to output JSON
             self.output_json["data"] = {"items": self.all_items}
             
-            # # Write output
-            # output_file = 'mapping_output.json'
-            # with open(output_file, 'w') as json_file:
-            #     json.dump(self.output_json, json_file, indent=4)
-                
-            # print(f"JSON output saved to {output_file}")
+            # Ensure JavaScript section is properly formatted
+            if not self.javascript_section:
+                self.javascript_section = {}
             
-            # Once all fields are processed, save the report (instead of saving after every field)
+            # Once all fields are processed, save the report
             self.Report.save_report()
             return self.output_json
         except Exception as e:
@@ -204,27 +360,31 @@ class XDPParser:
             pagesets = self.root.findall(".//template:pageSet", self.namespaces)
             
             for pageset in pagesets:
-                
-                page_fields = self.process_page_fields(pageset)
-                # Add master page group if we found any fields
-                if page_fields:
-
-                    # master_page = {
-                    #     "type": "group",
-                    #     "label": "Master Page",
-                    #     "id": self.next_id(),
-                    #     "groupId": str(self.mapping["constants"]["ministry_id"]),
-                    #     "repeater": False,
-                    #     "codeContext": {
-                    #         "name": "master_page"
-                    #     },
-                    #     "groupItems": [
-                    #         {
-                    #             "fields": page_fields
-                    #         }
-                    #     ]
-                    # }
-                    self.all_items.append(page_fields)
+                # Find text elements in pageSet for header/footer info
+                for draw in pageset.findall(".//template:draw", self.namespaces):
+                    draw_name = draw.attrib.get("name", "generic_text_display")
+                    
+                    # Get the text value if available
+                    text_value = None
+                    text_elem = draw.find(".//template:text", self.namespaces)
+                    if text_elem is not None and text_elem.text:
+                        text_value = text_elem.text
+                    
+                    # Create text-info field
+                    text_field = {
+                        "type": "text-info",
+                        "id": self.next_id(),
+                        "label": None,
+                        "helpText": None,
+                        "styles": None,
+                        "mask": None,
+                        "codeContext": {
+                            "name": None
+                        },
+                        "value": text_value,
+                    }
+                    self.all_items.append(text_field)
+                    self.Report.report_success(draw_name, 'text-info', text_value)
         except Exception as e:
             print(f"Error processing master pages: {e}")
     
@@ -253,7 +413,6 @@ class XDPParser:
                         "name": None
                     },
                     "value": text_value,
-                    "helperText": None
                 }
                 page_fields.append(text_field)
                 self.Report.report_success(draw_name, 'text-info', text_value)
@@ -303,7 +462,7 @@ class XDPParser:
             draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
             
             # Track breadcrumb for mapping lookup
-            self.add_breadcrumb(draw_name)
+            self.add_breadcrumb(draw_name, draw)
             current_path = self.get_breadcrumb()
             
             # Find mapping configuration for this draw element
@@ -311,20 +470,30 @@ class XDPParser:
             
             # Get text content if available
             text_value = None
-            text_elem = draw.find(".//template:text", self.namespaces)
-            if text_elem is not None and text_elem.text:
-                text_value = text_elem.text
             
-            # Check for HTML content
-            html_elem = None
-            for elem in draw.findall(".//template:exData", self.namespaces):
-                if elem.attrib.get("contentType") == "text/html":
-                    html_elem = elem
-                    break
-                    
-            if html_elem is not None and html_elem.text:
-                # text_value = html_elem.text
-                text_value = self.extract_text_from_exdata(elem)
+            # First check for direct text value in value/text element
+            value_elem = draw.find(".//template:value/template:text", self.namespaces)
+            if value_elem is not None and value_elem.text:
+                text_value = value_elem.text
+            
+            # Then check for text in exData
+            if not text_value:
+                for exdata_elem in draw.findall(".//template:exData", self.namespaces):
+                    if exdata_elem.attrib.get("contentType") == "text/html":
+                        html_text = self.extract_text_from_exdata(exdata_elem)
+                        if html_text:
+                            text_value = html_text
+                            break
+            
+            # Get label using enhanced extraction
+            label = self.extract_label(draw)
+            
+            # If no label but we have text that looks like a label, use it
+            if not label and text_value:
+                # Check if text_value looks like a label
+                if text_value.endswith(':') or text_value.isupper() or len(text_value.split()) <= 4:
+                    label = text_value
+                    text_value = None  # Don't use the same text as both label and value
             
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
@@ -336,21 +505,39 @@ class XDPParser:
                 text_lower = text_value.lower()
                 if "personal information" in text_lower or "freedom of information" in text_lower:
                     field_type = "foi_statement"
+                # Check if this should be a text input based on field name or text content
+                elif any(indicator in draw_name.lower() for indicator in ["file", "program", "document", "reference", "number"]):
+                    field_type = "text-input"
             
-            # Create text-info field
-            field_obj = {
-                "type": "text-info",
-                "id": self.next_id(),
-                "label": mapping.get("label") if mapping else None,
-                "helpText": mapping.get("helpText") if mapping else None,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": None
-                },
-                "value": text_value,
-                "helperText": None
-            }
+            # Create field object based on type
+            if field_type == "text-input":
+                field_obj = {
+                    "type": "text-input",
+                    "id": self.next_id(),
+                    "label": label,
+                    "helpText": mapping.get("helpText") if mapping else None,
+                    "styles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": draw_name
+                    },
+                    "placeholder": None,
+                    "inputType": "text"
+                }
+            else:
+                # Create text-info field
+                field_obj = {
+                    "type": "text-info",
+                    "id": self.next_id(),
+                    "label": label,
+                    "helpText": mapping.get("helpText") if mapping else None,
+                    "styles": None,
+                    "mask": None,
+                    "codeContext": {
+                        "name": draw_name
+                    },
+                    "value": text_value,
+                }
             
             # Apply any additional mapping properties
             if mapping:
@@ -358,8 +545,8 @@ class XDPParser:
                     field_obj["required"] = mapping.get("required")
                 if mapping.get("styles"):
                     field_obj["styles"] = mapping.get("styles")
-                
-            self.Report.report_success(draw_name, 'text-info', text_value)
+            
+            self.Report.report_success(draw_name, field_type, label or text_value)
             self.remove_breadcrumb(draw_name)
             return field_obj
         except Exception as e:
@@ -370,13 +557,46 @@ class XDPParser:
             self.remove_breadcrumb(draw_name if 'draw_name' in locals() else "unknown")
             return None
     
+    def extract_label(self, field):
+        """Extract label from field using multiple methods"""
+        try:
+            label = None
+            
+            # Method 1: Direct caption
+            caption_elem = field.find(".//template:caption//template:text", self.namespaces)
+            if caption_elem is not None and caption_elem.text:
+                label = caption_elem.text.strip()
+            
+            # Method 2: Value text that looks like a label
+            if not label:
+                value_elem = field.find(".//template:value//template:text", self.namespaces)
+                if value_elem is not None and value_elem.text:
+                    text = value_elem.text.strip()
+                    # Check if this looks like a label (ends with :, all caps, etc)
+                    if text.endswith(':') or text.isupper() or len(text.split()) <= 4:
+                        label = text
+            
+            # Method 3: Field name converted to label
+            if not label:
+                field_name = field.attrib.get("name", "")
+                if field_name:
+                    # Convert camelCase/snake_case to space-separated words
+                    import re
+                    label = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', field_name)).strip()
+                    label = ' '.join(word.capitalize() for word in re.split('[-_]', label))
+            
+            return label
+        except Exception as e:
+            print(f"Error extracting label: {e}")
+            return None
+
     def process_field(self, field):
         try:
             """Process a field element"""
             field_name = field.attrib.get("name", f"field_{self.id_counter}")
             
             # Get current XML path for mapping lookup
-            self.add_breadcrumb(field_name)
+            self.add_breadcrumb(field_name, field)
             current_path = self.get_breadcrumb()
             
             # Find mapping configuration for this field path
@@ -396,12 +616,9 @@ class XDPParser:
             
             ui_child = ui_children[0]
             ui_tag = ui_child.tag.split('}')[-1] if '}' in ui_child.tag else ui_child.tag
-            
-            # Get caption/label if available
-            caption_text = None
-            caption_elem = field.find("./template:caption/template:value/template:text", self.namespaces)
-            if caption_elem is not None and caption_elem.text:
-                caption_text = caption_elem.text
+
+            # Get label using enhanced extraction
+            label = self.extract_label(field)
             
             # Get help text if available
             help_text = None
@@ -424,15 +641,16 @@ class XDPParser:
                 field_type = mapping.get("fieldType")
                 # Apply other mapping configurations
                 if mapping.get("label"):
-                    caption_text = mapping.get("label")
+                    label = mapping.get("label")
                 if mapping.get("helpText"):
                     help_text = mapping.get("helpText")
             
+            # Create field object based on UI type
             if ui_tag == "textEdit":
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "mask": None,
@@ -440,8 +658,8 @@ class XDPParser:
                         "name": None
                     },
                     "placeholder": None,
-                    "helperText": None,
-                    "inputType": "text"
+                    "inputType": "text",
+                    "conditions": []
                 }
                 
                 # Check for special field types based on field name if no mapping found
@@ -475,14 +693,15 @@ class XDPParser:
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
                     },
                     "value": None,
-                    "inputType": "number"
+                    "inputType": "number",
+                    "conditions": []
                 }
                 
                 if binding_ref:
@@ -491,96 +710,67 @@ class XDPParser:
                     # Apply any dataSource mappings
                     if mapping and mapping.get("dataSource"):
                         field_obj["databindings"]["source"] = mapping.get("dataSource")
+            
             elif ui_tag == "dateTimeEdit":
-            # Extract the date format if available
+                # Extract the date format if available
                 date_format = "yyyy-MM-dd"  # Default format
                 format_elem = field.find("./template:format/template:picture", self.namespaces)
                 if format_elem is not None and format_elem.text:
                     date_format = format_elem.text.lower().replace("yyyy", "Y").replace("dd", "d").replace("mm", "m")
 
-                # Define validation rules
-                validation_rules = [
-                    {
-                        "type": "required",
-                        "value": True,
-                        "errorMessage": "Date of birth should be submitted"
-                    },
-                    {
-                        "type": "maxDate",
-                        "value": "2024-09-01",
-                        "errorMessage": "Date should be less than September 1st 2024 due to legislation"
-                    },
-                    {
-                        "type": "minDate",
-                        "value": "2000-01-01",
-                        "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
-                    },
-                    {
-                        "type": "javascript",
-                        "value": "{ const birthDate = new Date(value); const today = new Date();"
-                                " const age = today.getFullYear() - birthDate.getFullYear();"
-                                " const monthDiff = today.getMonth() - birthDate.getMonth();"
-                                " const dayDiff = today.getDate() - birthDate.getDate();"
-                                " if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) { age--; }"
-                                " return age >= 18; }",
-                        "errorMessage": "You must be at least 18 years old."
-                    }
-                ]
-
-                # Create the JSON structure for date-picker
                 field_obj = {
                     "type": "date",
-                    "label": caption_text,
+                    "label": label,
                     "id": self.next_id(),
                     "fieldId": str(self.next_id()),
                     "codeContext": {
                         "name": None
                     },
-                    "label": caption_text,
+                    "label": label,
                     "placeholder": None,
                     "mask": date_format,
-                    "validation": validation_rules
+                    "conditions": []
                 }
+            
             elif ui_tag == "button":
                 field_obj = {
                     "type": "button",
                     "id": self.next_id(),
-                    "label": caption_text,
+                    "label": label,
                     "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
                     },
-                    "buttonType": "submit"
+                    "buttonType": "submit",
+                    "conditions": []
                 }
+            
             elif ui_tag == "choiceList":
                 field_obj = {
-                "id": self.next_id(),
-                "mask": None,
-                "size": "md",
-                "type": "dropdown",
-                "label": caption_text if caption_text else "Dropdown",
-                "styles": None,
-                "isMulti": False,
-                "helpText": None,
-                "isInline": False,
-                "direction": "bottom",
-                "listItems": [],  # List of dropdown options
-                "helperText": "",
-                "codeContext": {
-                    "name": field_name
-                },
-                "customStyle": {
-                    "printColumns": "2"
-                },
-                "placeholder": "",
-                "selectionFeedback": "top-after-reopen"
-            }
-             # ✅ Extract visible items from `<items>` tag
+                    "id": self.next_id(),
+                    "mask": None,
+                    "size": "md",
+                    "type": "dropdown",
+                    "label": label if label else "Dropdown",
+                    "styles": None,
+                    "isMulti": False,
+                    "helpText": None,
+                    "isInline": False,
+                    "direction": "bottom",
+                    "listItems": [],  # List of dropdown options
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "placeholder": "",
+                    "conditions": []
+                }
+                
+                # Extract visible items from `<items>` tag
                 visible_items = field.findall("./template:items/template:text", self.namespaces)
                 saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
 
-                # 🛠️ Ensure correct mapping of labels and values
+                # Ensure correct mapping of labels and values
                 list_items = []
                 for index, item in enumerate(visible_items):
                     value = saved_values[index].text if index < len(saved_values) else item.text
@@ -588,13 +778,12 @@ class XDPParser:
                         list_items.append({"text": item.text.strip(), "value": value.strip()})
 
                 field_obj["listItems"] = list_items
-           
+            
             elif ui_tag == "checkButton":
                 field_obj = {
                     "type": "checkbox",
                     "id": self.next_id(),
-                    "label": caption_text if caption_text else "Checkbox",
-                    "helperText": "",
+                    "label": label if label else "Checkbox",
                     "webStyles": None,
                     "pdfStyles": None,
                     "mask": None,
@@ -602,22 +791,14 @@ class XDPParser:
                         "name": field_name
                     },
                     "databindings": {},
-                    "listItems": []  # ✅ Add listItems support
+                    "conditions": []
                 }
 
-                
-                # ✅ Extract available checkbox options (integer values)
-                items_elem = field.findall("./template:items/template:integer", self.namespaces)
-                if items_elem:
-                    for item in items_elem:
-                        item_value = item.text.strip() if item.text else "Unknown"
-                        field_obj["listItems"].append({"text": item_value, "value": item_value})
-
-                # ✅ Extract checkbox default value (1 = checked, 0 = unchecked)
+                # Extract checkbox default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
                 if value_elem is not None:
                     field_obj["value"] = value_elem.text.strip() == "1"
-                    # ✅ Assign Data Bindings (source & path)
+                    # Assign Data Bindings (source & path)
                     binding_elem = field.find("./template:bind", self.namespaces)
                     if binding_elem is not None and 'ref' in binding_elem.attrib:
                         binding_ref = binding_elem.attrib['ref']
@@ -625,10 +806,39 @@ class XDPParser:
                             "source": None,  # Adjust this if needed
                             "path": binding_ref
                         }
-
-            # Rest of the method remains the same...
-            # (Other field types like dateTimeEdit, checkButton, etc.)
             
+            elif ui_tag == "signature":
+                field_obj = {
+                    "id": self.next_id(),
+                    "mask": None,
+                    "type": "text-input",  # Overriding from "signature" to "text-input"
+                    "label": label if label else None,
+                    "styles": None,
+                    "helpText": help_text,
+                    "inputType": "text",
+                    "codeContext": {
+                        "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
+                    },
+                    "customStyle": {
+                        "printColumns": "2"
+                    },
+                    "placeholder": "",
+                    "conditions": []
+                }
+
+            # Process any scripts and get conditions after field_obj is created
+            if field_obj:
+                script_result = self.process_script(field)
+                if script_result:
+                    if script_result["type"] == "visibility":
+                        field_obj["conditions"].append(script_result)
+                    elif script_result["type"] == "calculatedValue":
+                        field_obj["calculatedValue"] = script_result["value"]
+                    elif script_result["type"] == "javascript":
+                        if "validation" not in field_obj:
+                            field_obj["validation"] = []
+                        field_obj["validation"].append(script_result)
+
             self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
@@ -639,7 +849,9 @@ class XDPParser:
                     if mapping.get("required"):
                         field_obj["required"] = mapping.get("required")
                     if mapping.get("validation"):
-                        field_obj["validation"] = mapping.get("validation")
+                        if "validation" not in field_obj:
+                            field_obj["validation"] = []
+                        field_obj["validation"].extend(mapping.get("validation", []))
             else:
                 self.Report.report_error(field_name, 'text-info', field_name, "Error processing field element")
                 
@@ -652,148 +864,320 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
-    def process_script(self, field):
-        # Look for script tags and process them
-        script_tags = field.findall(".//template:script", self.namespaces)
-        for script_tag in script_tags:
-            script_text = script_tag.text
-            if script_text:
-                return {
-                    "type": "javascript",
-                    "value": script_text,
-                    "errorMessage": None
-                }
+    def process_script(self, field, event_name="initialize"):
+        """Process script tags and convert Adobe JavaScript to standard JavaScript"""
+        try:
+            # Look for direct script tags
+            script_tags = field.findall(".//template:script", self.namespaces)
+            
+            # Also look for scripts within event tags
+            event_tags = field.findall(".//template:event", self.namespaces)
+            for event_tag in event_tags:
+                event_name = event_tag.attrib.get("activity", "initialize")
+                for script_tag in event_tag.findall(".//template:script", self.namespaces):
+                    script_tags.append((script_tag, event_name))
+            
+            field_id = field.attrib.get("name", f"field_{self.id_counter}")
+            
+            # Check if this is a group field
+            is_group_field = False
+            group_id = None
+            parent = field.getparent() if hasattr(field, 'getparent') else None
+            if parent is not None and 'subform' in parent.tag:
+                is_group_field = True
+                group_id = parent.attrib.get("name", "").split('_')[0]
+                field_id = f"group_{group_id}_{field_id}"
+            
+            for script_item in script_tags:
+                # Handle both direct script tags and event script tuples
+                if isinstance(script_item, tuple):
+                    script_tag, event_name = script_item
+                else:
+                    script_tag = script_item
+                
+                script_text = script_tag.text
+                if script_text:
+                    # Convert the script
+                    converted_script = self.convert_adobe_script(script_text, field_id, event_name)
+                    if converted_script:
+                        # Add to JavaScript section
+                        self.javascript_section[field_id] = converted_script
+                        
+                        # Check if this is a visibility condition
+                        if "style.display" in converted_script:
+                            return {
+                                "type": "visibility",
+                                "value": converted_script
+                            }
+                        # Check if this is a docReady event
+                        elif event_name == "docReady":
+                            return {
+                                "type": "javascript",
+                                "value": converted_script,
+                                "event": "docReady",
+                                "errorMessage": None
+                            }
+                        # Check if this is a calculated value - look for direct value assignment
+                        elif "document.getElementById" in converted_script and ".value =" in converted_script:
+                            return {
+                                "type": "calculatedValue",
+                                "value": converted_script
+                            }
+                        else:
+                            return {
+                                "type": "javascript",
+                                "value": converted_script,
+                                "errorMessage": None
+                            }
+            return None
+        except Exception as e:
+            print(f"Error processing script: {e}")
+            return None
+
+    def convert_adobe_script(self, script_text, field_id, event_name, is_global=False):
+        """Convert Adobe-specific JavaScript to standard JavaScript"""
+        try:
+            # Create method name based on field ID and event
+            method_name = f"global_{event_name}" if is_global else f"{field_id}_{event_name}"
+            
+            # Replace Adobe-specific terms
+            script = script_text.replace("this.rawValue", "document.getElementById('" + field_id + "').value")
+            script = script.replace(".presence = 'hidden'", ".style.display = 'none'")
+            script = script.replace(".presence = 'visible'", ".style.display = 'block'")
+            
+            # Handle field references
+            # Replace direct field references with document.getElementById calls
+            import re
+            field_refs = re.findall(r'(\w+)\.', script)
+            for ref in field_refs:
+                if ref != 'document':
+                    # Check if this is a group field reference
+                    if ref.startswith('group_'):
+                        # Handle group field reference
+                        group_id = ref.split('_')[1]
+                        script = script.replace(f"{ref}.", f"groupStates['{group_id}']?.[0]?.['{group_id}-0-{ref}'].")
+                    else:
+                        # Handle regular field reference
+                        script = script.replace(f"{ref}.", f"formStates['{ref}']")
+            
+            # Create the JavaScript method
+            js_method = f"""
+function {method_name}(fieldId) {{
+    const field = document.getElementById(fieldId);
+    {script}
+}}
+"""
+            return js_method
+        except Exception as e:
+            print(f"Error converting Adobe script: {e}")
+            return None
+
+    def process_global_scripts(self):
+        """Process global scripts in the root subform"""
+        try:
+            # Look for script tags in the root subform
+            script_tags = self.root_subform.findall(".//template:script", self.namespaces)
+            
+            for script_tag in script_tags:
+                script_text = script_tag.text
+                if script_text:
+                    # Convert the script as a global script
+                    converted_script = self.convert_adobe_script(script_text, "global", "initialize", True)
+                    if converted_script:
+                        # Add to JavaScript section
+                        self.javascript_section["global"] = converted_script
+        except Exception as e:
+            print(f"Error processing global scripts: {e}")
 
     def process_subform(self, subform):
         try:
-            """Process a subform element (adds it as a top-level group)"""
-            subform_name = subform.attrib.get("name", f"generic_subform_{self.id_counter}")
+            """Process a subform element"""
+            subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
+            
+            # Check if this is a repeating group (has occur element)
+            occur_elem = subform.find("./template:occur", self.namespaces)
+            is_repeating = occur_elem is not None
+            
+            # Process any scripts and get conditions
+            conditions = []
+            script_result = self.process_script(subform)
+            if script_result:
+                if script_result["type"] == "visibility":
+                    conditions.append(script_result)
+                elif script_result["type"] == "javascript":
+                    conditions.append(script_result)
 
-            # Check if this is a repeating subform
-            has_occur = subform.find("./template:occur", self.namespaces) is not None
+            # Create group object if this is a repeating group
+            if is_repeating:
+                group_obj = {
+                    "type": "group",
+                    "id": self.next_id(),
+                    "label": None,
+                    "helpText": None,
+                    "styles": None,
+                    "codeContext": {
+                        "name": subform_name
+                    },
+                    "repeater": True,
+                    "conditions": conditions,
+                    "items": []
+                }
+                
+                # Process direct child fields in this subform (not descendants)
+                for field in subform.findall("./template:field", self.namespaces):
+                    field_obj = self.process_field(field)
+                    if field_obj:
+                        # Add conditions to each field
+                        if conditions:
+                            field_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for field identification
+                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                        group_obj["items"].append(field_obj)
 
-            # Determine group ID based on name
-            group_id = "1"  # Default
-            if "contact" in subform_name.lower():
-                group_id = "11"
-            elif "submit" in subform_name.lower():
-                group_id = "6"
+                # Process direct child draw elements (not descendants)
+                for draw in subform.findall("./template:draw", self.namespaces):
+                    draw_obj = self.process_draw(draw)
+                    if draw_obj:
+                        # Add conditions to each draw element
+                        if conditions:
+                            if "conditions" not in draw_obj:
+                                draw_obj["conditions"] = []
+                            draw_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for draw identification
+                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                        group_obj["items"].append(draw_obj)
 
-            # Group label - Capitalize words and add spaces
-            label = " ".join(word.capitalize() for word in subform_name.split("_"))
-            if has_occur:
-                label = f"Table - {label}"
+                # Process direct child subforms (not descendants)
+                for nested_subform in subform.findall("./template:subform", self.namespaces):
+                    nested_group = self.process_subform(nested_subform)
+                    if nested_group:
+                        # Add conditions to nested group if they exist
+                        if conditions:
+                            if "conditions" not in nested_group:
+                                nested_group["conditions"] = []
+                            nested_group["conditions"].extend(conditions)
+                        group_obj["items"].append(nested_group)
 
-            # Create group for this subform
-            subform_group = {
-                "type": "group",
-                "label": label,
-                "id": self.next_id(),
-                "groupId": group_id,
-                "repeater": has_occur,
-                "codeContext": {
-                    "name": None
-                },
-                "groupItems": [{"fields": []}]
-            }
+                # Add the group to all_items and return it
+                self.all_items.append(group_obj)
+                return group_obj
+            else:
+                # Process non-repeating subform fields directly
+                for field in subform.findall("./template:field", self.namespaces):
+                    field_obj = self.process_field(field)
+                    if field_obj:
+                        # Add conditions to each field
+                        if conditions:
+                            field_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for field identification
+                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                        self.all_items.append(field_obj)
 
-            # Process fields in this subform
-            for field in subform.findall("./template:field", self.namespaces):
-                field_obj = self.process_field(field)
-                if field_obj:
-                    field_script = self.process_script(field)
-                    if field_script:
-                        if "validation" in field_obj:
-                            field_obj["validation"].append(field_script)
-                        else:
-                            field_obj["validation"] = [field_script]
-                    self.all_items.append(field_obj)
+                # Process direct child draw elements (not descendants)
+                for draw in subform.findall("./template:draw", self.namespaces):
+                    draw_obj = self.process_draw(draw)
+                    if draw_obj:
+                        # Add conditions to each draw element
+                        if conditions:
+                            if "conditions" not in draw_obj:
+                                draw_obj["conditions"] = []
+                            draw_obj["conditions"].extend(conditions)
+                        # Add subform name to codeContext for draw identification
+                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                        self.all_items.append(draw_obj)
 
-            # Process draw elements (text display)
-            for draw in subform.findall("./template:draw", self.namespaces):
-                draw_obj = self.process_draw(draw)
-                if draw_obj:
-                    self.all_items.append(draw_obj)
+                # Process direct child subforms (not descendants)
+                for nested_subform in subform.findall("./template:subform", self.namespaces):
+                    nested_group = self.process_subform(nested_subform)
+                    if nested_group:
+                        # Add conditions to nested group if they exist
+                        if conditions:
+                            if "conditions" not in nested_group:
+                                nested_group["conditions"] = []
+                            nested_group["conditions"].extend(conditions)
+                        self.all_items.append(nested_group)
 
-            # Process nested subforms (add them at the top level, not under this subform)
-            for nested_subform in subform.findall("./template:subform", self.namespaces):
-                self.process_subform(nested_subform)
+                return None
 
         except Exception as e:
             print(f"Error processing subform: {e}")
-
-
+            return None
 
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
             
-            # Create group for this exclusion group
-            group_obj = {
-                "type": "group",
-                "label": group_name,
-                "id": self.next_id(),
-                "groupId": "1",
-                "repeater": False,
-                "codeContext": {
-                    "name": None
-                },
-                "groupItems": [
-                    {
-                        "fields": []
-                    }
-                ]
-            }
+            # Process any scripts and get conditions
+            conditions = []
+            script_result = self.process_script(exclgroup)
+            if script_result:
+                if script_result["type"] == "visibility":
+                    conditions.append(script_result)
+                elif script_result["type"] == "calculatedValue":
+                    calculated_value = script_result["value"]
+                elif script_result["type"] == "javascript":
+                    if "validation" not in field_obj:
+                        field_obj["validation"] = []
+                    field_obj["validation"].append(script_result)
             
             # Process fields (usually radio buttons) in this group
-            fields = []
             for field in exclgroup.findall("./template:field", self.namespaces):
                 radio_obj = self.process_field(field)
                 if radio_obj:
                     # Make sure it's a radio button and set the group name
                     if radio_obj["type"] == "radio":
                         radio_obj["groupName"] = group_name
-                    field_script = self.process_script(field)
-                    if field_script:
-                        if "validation" in radio_obj:
-                            radio_obj["validation"].append(field_script)
-                        else:
-                            radio_obj["validation"] = [field_script]
-                    fields.append(radio_obj)
+                        # Add conditions to each radio button
+                        if conditions:
+                            radio_obj["conditions"] = conditions
+                        self.all_items.append(radio_obj)
+                        self.Report.report_success(group_name, 'radio', "Radio Button")
             
-            # If we found fields, add them to the group
-            if fields:
-                group_obj["groupItems"][0]["fields"] = fields
-                self.Report.report_success(group_name, 'group', "Exclusion Group")
-                return group_obj
-            
-            return None
+            return None  # No longer returning a group object
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
             self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
-                                    'group', 
+                                    'radio', 
                                     "Error processing exclusion group")
             return None
     
     def extract_text_from_exdata(self, exdata_elem):
-        # Get all text content recursively
-        all_text = []
-        
-        # Define function to extract text from element and its children
-        def extract_text(element):
-            if element.text and element.text.strip():
-                all_text.append(element.text.strip())
+        try:
+            # Get all text content recursively
+            all_text = []
             
-            for child in element:
-                extract_text(child)
+            # Define function to extract text from element and its children
+            def extract_text(element):
+                if element.text and element.text.strip():
+                    all_text.append(element.text.strip())
                 
-            if element.tail and element.tail.strip():
-                all_text.append(element.tail.strip())
-        
-        # Start extraction with the body element directly under exdata_elem
-        for body_elem in exdata_elem.findall("body"):
-            extract_text(body_elem)
-        
-        # Join all text pieces with space
-        return " ".join(all_text)
+                for child in element:
+                    if '}' in child.tag:
+                        tag = child.tag.split('}')[1]
+                    else:
+                        tag = child.tag
+                        
+                    # Skip style-related tags
+                    if tag in ['style', 'xfa-spacerun']:
+                        continue
+                        
+                    extract_text(child)
+                    
+                if element.tail and element.tail.strip():
+                    all_text.append(element.tail.strip())
+            
+            # Start extraction with the body element directly under exdata_elem
+            for body_elem in exdata_elem.findall(".//{http://www.w3.org/1999/xhtml}body"):
+                extract_text(body_elem)
+            
+            # If no text was found in body, try direct text content
+            if not all_text:
+                if exdata_elem.text and exdata_elem.text.strip():
+                    all_text.append(exdata_elem.text.strip())
+            
+            # Join all text pieces with space
+            return " ".join(all_text)
+        except Exception as e:
+            print(f"Error extracting text from exData: {e}")
+            return None
