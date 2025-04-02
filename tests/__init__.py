@@ -1,3 +1,3 @@
 """
-Test package for XML-JSON-Converter
+Unit tests for XML-JSON Converter
 """ 

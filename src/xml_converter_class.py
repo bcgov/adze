@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from report import Report
+from src.report import Report
 
 class XDPParser:
     def __init__(self, xml_filename, mapping_file=None):
