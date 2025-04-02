@@ -7,6 +7,8 @@ spec:
   team:
     description: The Sysdig Team for the OpenShift Project Set c79ac4
     users:
+      - name: Sofia.Blaunshteyn@gov.bc.ca
+        role: ROLE_TEAM_READ
       - name: bojan.zimonja@gov.bc.ca
         role: ROLE_TEAM_EDIT
       - name: Robert.Seib@gov.bc.ca
@@ -15,9 +17,5 @@ spec:
         role: ROLE_TEAM_READ
       - name: david.okulski@gov.bc.ca
         role: ROLE_TEAM_READ
-      - name: Sofia.Blaunshteyn@gov.bc.ca
-        role: ROLE_TEAM_READ
-      - name: jimin.byun@aot-technologies.com
-        role: ROLE_TEAM_EDIT
       - name: jimin.byun@aot-technologies.com
         role: ROLE_TEAM_EDIT
