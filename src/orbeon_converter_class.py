@@ -585,7 +585,6 @@ class OrbeonParser:
                 "type": "text-info",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -598,7 +597,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -616,7 +614,6 @@ class OrbeonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -633,7 +630,6 @@ class OrbeonParser:
                 "id": self.next_id(),
                 "fieldId": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "placeholder": None,
                 "mask": "yyyy-MM-dd",
                 "codeContext": {
@@ -648,7 +644,6 @@ class OrbeonParser:
                 "type": "checkbox",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "webStyles": None,
                 "pdfStyles": None,
                 "mask": None,
@@ -664,7 +659,6 @@ class OrbeonParser:
                 "type": "radio",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -683,7 +677,6 @@ class OrbeonParser:
                 "size": "md",
                 "type": "dropdown",
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "isMulti": False,
                 "isInline": False,
@@ -704,7 +697,6 @@ class OrbeonParser:
                 "type": "signature",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -719,7 +711,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": None,
                 "codeContext": {
@@ -737,7 +728,6 @@ class OrbeonParser:
                 "type": "text-input",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "mask": "(###) ###-####",
                 "codeContext": {
@@ -755,7 +745,6 @@ class OrbeonParser:
                 "type": "text-area",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
@@ -771,7 +760,6 @@ class OrbeonParser:
                 "type": "file",
                 "id": self.next_id(),
                 "label": label,
-                "helpText": hint,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
