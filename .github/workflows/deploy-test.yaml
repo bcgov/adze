@@ -59,8 +59,9 @@ jobs:
       - name: Run CLI integration test inside pod
         run: |
           POD=$(oc get pods -n c79ac4-test -l app.kubernetes.io/name=adze -o jsonpath='{.items[0].metadata.name}')
+          echo "⏳ Running CLI conversion test inside pod: $POD"
           oc exec -n c79ac4-test $POD -- \
-            python src/xml_converter.py -f /app/data/input/CFL01010.xdp -o /app/data/output
+            env PYTHONPATH=/app python3 src/xml_converter.py -f /app/data/input/CFL01010.xdp -o /app/data/output
           echo "✅ CLI conversion completed."
           oc exec -n c79ac4-test $POD -- \
             ls /app/data/output | grep CFL01010_xdp_output_ || echo "No test files found"
