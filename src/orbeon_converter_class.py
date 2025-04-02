@@ -220,6 +220,22 @@ class OrbeonParser:
             section_name = section.tag
             self.add_breadcrumb(section_name)
             
+            # Get section label
+            section_label = self.get_field_label(section_name)
+            
+            # Create section object
+            if section_label:
+                section_obj = {
+                    "type": "text-info",
+                    "id": self.next_id(),
+                    "label": section_label,
+                    "codeContext": {
+                        "name": section_name
+                    },
+                    "value": section_label
+                }
+                self.all_items.append(section_obj)
+            
             # Process each grid in the section
             for grid in section:
                 grid_name = grid.tag
@@ -369,20 +385,7 @@ class OrbeonParser:
             # Process date validation
             if field_type == "date":
                 # Add specific validation rules based on field name
-                if "birth" in field_name.lower():
-                    field_obj["validation"].extend([
-                        {
-                            "type": "maxDate",
-                            "value": "2024-09-01",
-                            "errorMessage": "Date should be less than September 1st 2024 due to legislation"
-                        },
-                        {
-                            "type": "minDate",
-                            "value": "2000-01-01",
-                            "errorMessage": "Date should be greater than January 1st 2000 due to legislations"
-                        }
-                    ])
-                elif "signed" in field_name.lower():
+                if "signed" in field_name.lower():
                     field_obj["validation"].extend([
                         {
                             "type": "maxDate",
