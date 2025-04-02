@@ -66,12 +66,12 @@ jobs:
       - name: Wait for pod to become ready
         run: |
           echo "⏳ Waiting for pod to be created..."
-          until oc get pods -n ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} -l app.kubernetes.io/name=adze-dev -o name | grep pod; do
+          until oc get pods -n ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} -l app.kubernetes.io/name=adze -o name | grep pod; do
             sleep 3
           done
       
           echo "⏳ Waiting for pod to become ready..."
-          until oc get pods -n ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} -l app.kubernetes.io/name=adze-dev \
+          until oc get pods -n ${{ secrets.OPENSHIFT_NAMESPACE_DEV }} -l app.kubernetes.io/name=adze \
             -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null | grep true; do
             sleep 5
           done
