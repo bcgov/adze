@@ -1,80 +1,97 @@
 # XML-JSON Converter Test Suite Documentation
 
 ## Overview
-This test suite provides comprehensive testing for both the Oberon and XDP XML parsers. The tests ensure proper functionality of XML parsing, field type determination, field creation, and complete XML to JSON conversion.
+This test suite provides comprehensive testing for both the Orbeon and XDP XML parsers. The tests ensure proper functionality of XML parsing, field type determination, field creation, and complete XML to JSON conversion.
 
 ## Test Structure
 
-### Setup and Teardown
-- `setUp()`: Creates test data directory and generates test XML and mapping files before each test
-- `tearDown()`: Cleans up test files after each test
-
 ### Test Files
-- `test_oberon.xml`: Sample Oberon XML file with form fields
-- `test_xdp.xml`: Sample XDP XML file with form fields
-- `test_mapping.json`: Configuration file for field mappings
+- `test_orbeon_converter.py`: Tests for the Orbeon XML parser
+- `test_xml_converter.py`: Tests for the XDP XML parser
+- `test_data/`: Directory containing test XML and mapping files
+- `test_output/`: Directory for test output files
 
 ## Test Cases
 
-### Parser Initialization Tests
-1. `test_oberon_parser_initialization`
-   - Verifies proper initialization of OberonParser
-   - Checks XML file loading, mapping file loading, and form instance detection
+### Orbeon Parser Tests (`test_orbeon_converter.py`)
+1. `test_parser_initialization`
+   - Verifies proper initialization of OrbeonParser
+   - Checks XML file loading and mapping file loading
 
-2. `test_xdp_parser_initialization`
+2. `test_load_mapping_file`
+   - Tests loading and parsing of mapping file
+   - Verifies constants and mappings structure
+
+3. `test_extract_binds`
+   - Tests extraction of form bindings
+   - Verifies bind map creation
+
+4. `test_create_output_structure`
+   - Tests creation of initial output JSON structure
+   - Verifies required fields and data sources
+
+5. `test_parse_method`
+   - Tests complete XML to JSON conversion
+   - Verifies data structure and items
+
+6. `test_process_section`
+   - Tests section processing
+   - Verifies item collection
+
+7. `test_process_field`
+   - Tests field processing
+   - Verifies field object creation
+
+8. `test_determine_field_type`
+   - Tests field type determination logic
+   - Verifies mapping-based type assignment
+
+9. `test_create_field_object`
+   - Tests field object creation
+   - Verifies field properties and structure
+
+### XDP Parser Tests (`test_xml_converter.py`)
+1. `test_parser_initialization`
    - Verifies proper initialization of XDPParser
-   - Checks XML file loading, mapping file loading, and root subform detection
+   - Checks XML file loading and mapping file loading
 
-### Field Type Determination Tests
-1. `test_oberon_field_type_determination`
-   - Tests correct field type detection for:
-     - Text info fields (control-476)
-     - Text input fields
-     - Date fields
+2. `test_load_mapping_file`
+   - Tests loading and parsing of mapping file
+   - Verifies constants and mappings structure
 
-2. `test_xdp_field_type_determination`
-   - Tests correct field type detection for:
-     - Text input fields
-     - Date fields
+3. `test_extract_namespaces`
+   - Tests XML namespace extraction
+   - Verifies namespace mapping
 
-### Field Creation Tests
-1. `test_oberon_field_creation`
-   - Verifies proper creation of:
-     - Text info fields with values
-     - Text input fields with values
+4. `test_create_output_structure`
+   - Tests creation of initial output JSON structure
+   - Verifies required fields
 
-2. `test_xdp_field_creation`
-   - Verifies proper creation of:
-     - Text input fields with labels
-     - Date fields with masks and labels
-
-### Full Conversion Tests
-1. `test_oberon_parser_full_conversion`
+5. `test_parse_method`
    - Tests complete XML to JSON conversion
-   - Verifies presence of all required fields
-   - Checks field values and types
+   - Verifies data structure and items
 
-2. `test_xdp_parser_full_conversion`
-   - Tests complete XML to JSON conversion
-   - Verifies presence of all required fields
-   - Checks field labels and types
+6. `test_process_field`
+   - Tests field processing
+   - Verifies field object creation
 
-### Error Handling Tests
-1. `test_invalid_xml_handling`
-   - Tests parser behavior with:
-     - Non-existent XML files
-     - Invalid XML content
-
-2. `test_mapping_file_handling`
-   - Tests parser behavior with:
-     - Non-existent mapping files
-     - Invalid JSON in mapping files
+7. `test_process_draw`
+   - Tests draw element processing
+   - Verifies draw object creation
 
 ## Running Tests
 To run the test suite:
 ```bash
-python -m unittest tests/test_converters.py -v
+# Run all tests
+python -m unittest discover tests -v
+
+# Run specific test file
+python -m unittest tests/test_orbeon_converter.py -v
+python -m unittest tests/test_xml_converter.py -v
 ```
 
 ## Test Data
-The test suite creates temporary test files in the `tests/test_data` directory. These files are automatically cleaned up after each test run. 
+The test suite creates temporary test files in the `tests/test_data` directory. These files are automatically cleaned up after each test run. The test data includes:
+- Sample Orbeon XML form
+- Sample XDP XML form
+- Mapping configuration files 

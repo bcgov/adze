@@ -8,7 +8,8 @@ spec:
       type: string
   steps:
     - name: inline-scan
-      image: sysdig/secure-inline-scan
+      image: quay.io/sysdig/secure-inline-scan:2.4.0
+      terminationMessagePolicy: FallbackToLogsOnError
       env:
         - name: SYS_DIG_TOKEN
           valueFrom:
@@ -17,7 +18,17 @@ spec:
               key: token
       script: |
         #!/bin/sh
-        echo "🔍 Running Sysdig Inline Scan for image: $(params.image-url)"
+        set -e
+        echo "🔍 Sysdig Inline Scan starting..."
+        echo "📦 Scanning image: $(params.image-url)"
+        echo "🔑 Token length: ${#SYS_DIG_TOKEN}"
+        echo "📁 Working directory: $(pwd)"
+        echo "📄 Listing contents:"
+        ls -la
+
+        echo "🚀 Executing inline scan script..."
         ./inline_scan.sh --sysdig-url https://secure.sysdig.com \
-                         --api-token $SYS_DIG_TOKEN \
-                         $(params.image-url)
+                        --api-token $SYS_DIG_TOKEN \
+                        $(params.image-url)
+
+        echo "✅ Inline scan completed successfully"

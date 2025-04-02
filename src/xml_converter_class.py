@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from report import Report
+from src.report import Report
 
 class XDPParser:
     def __init__(self, xml_filename, mapping_file=None):
@@ -288,10 +288,9 @@ class XDPParser:
     def create_output_structure(self):
         try:
             """Create the base output JSON structure"""
-            # Extract form ID from filename or default
-            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]  # Remove extension
-            # Get form title if available
-            form_title = "Work Search Activity Record"  # Default title
+            # Extract form ID from filename (e.g. CFL04511 from CFL04511.xml)
+            form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+
             
             # Find title text manually since contains() is not supported in ElementTree XPath
             for text_elem in self.root.findall(".//template:text", self.namespaces):
@@ -313,13 +312,20 @@ class XDPParser:
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
+                        # In case of error, try to get form_id from filename, otherwise use default
+            try:
+                form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
+            except:
+                form_id = "FORM0001"
+                
+
             return {
                 "version": None,
                 "ministry_id": "0",
                 "id": None,
                 "lastModified": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
                 "title": None,
-                "form_id": "FORM0001",
+                "form_id": form_id,
                 "deployed_to": None,
                 "dataSources": [],
                 "javascript": self.javascript_section,  # Add JavaScript section
@@ -375,7 +381,6 @@ class XDPParser:
                         "type": "text-info",
                         "id": self.next_id(),
                         "label": None,
-                        "helpText": None,
                         "styles": None,
                         "mask": None,
                         "codeContext": {
@@ -406,7 +411,6 @@ class XDPParser:
                     "type": "text-info",
                     "id": self.next_id(),
                     "label": None,
-                    "helpText": None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -458,7 +462,7 @@ class XDPParser:
     
     def process_draw(self, draw):
         try:
-            """Process a draw element (usually text display)"""
+            """Process a draw element (usually text display or image)"""
             draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
             
             # Track breadcrumb for mapping lookup
@@ -467,6 +471,31 @@ class XDPParser:
             
             # Find mapping configuration for this draw element
             mapping = self.find_mapping_for_path(current_path)
+            
+            # Check for image content first
+            image_elem = draw.find(".//template:value/template:image", self.namespaces)
+            if image_elem is not None and image_elem.attrib.get("contentType", "").startswith("image/"):
+                # Create image field object
+                field_obj = {
+                    "type": "image",
+                    "id": self.next_id(),
+                    "label": None,
+                    "styles": None,
+                    "codeContext": {
+                        "name": None
+                    },
+                    "contentType": image_elem.attrib.get("contentType"),
+                    "value": image_elem.text if image_elem.text else None
+                }
+                
+                # Apply any additional mapping properties
+                if mapping:
+                    if mapping.get("styles"):
+                        field_obj["styles"] = mapping.get("styles")
+                
+                self.Report.report_success(draw_name, 'image', None)
+                self.remove_breadcrumb(draw_name)
+                return field_obj
             
             # Get text content if available
             text_value = None
@@ -515,7 +544,6 @@ class XDPParser:
                     "type": "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -530,7 +558,6 @@ class XDPParser:
                     "type": "text-info",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": mapping.get("helpText") if mapping else None,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -642,16 +669,37 @@ class XDPParser:
                 # Apply other mapping configurations
                 if mapping.get("label"):
                     label = mapping.get("label")
-                if mapping.get("helpText"):
-                    help_text = mapping.get("helpText")
             
             # Create field object based on UI type
-            if ui_tag == "textEdit":
+            if ui_tag == "fileSelect":
+                field_obj = {
+                    "type": "file",
+                    "id": self.next_id(),
+                    "label": label,
+                    "helpText": help_text,
+                    "styles": None,
+                    "codeContext": {
+                        "name": field_name
+                    },
+                    "accept": "*/*",
+                    "multiple": False,
+                    "maxSize": None,
+                    "validation": []
+                }
+                
+                # Add databinding if available
+                if binding_ref:
+                    field_obj["databindings"] = {"path": binding_ref}
+                    
+                    # Apply any dataSource mappings
+                    if mapping and mapping.get("dataSource"):
+                        field_obj["databindings"]["source"] = mapping.get("dataSource")
+            
+            elif ui_tag == "textEdit":
                 field_obj = {
                     "type": field_type or "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
@@ -694,7 +742,6 @@ class XDPParser:
                     "type": field_type or "text-input",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
@@ -737,7 +784,6 @@ class XDPParser:
                     "type": "button",
                     "id": self.next_id(),
                     "label": label,
-                    "helpText": help_text,
                     "styles": None,
                     "codeContext": {
                         "name": None
@@ -755,7 +801,6 @@ class XDPParser:
                     "label": label if label else "Dropdown",
                     "styles": None,
                     "isMulti": False,
-                    "helpText": None,
                     "isInline": False,
                     "direction": "bottom",
                     "listItems": [],  # List of dropdown options
@@ -766,16 +811,33 @@ class XDPParser:
                     "conditions": []
                 }
                 
-                # Extract visible items from `<items>` tag
-                visible_items = field.findall("./template:items/template:text", self.namespaces)
-                saved_values = field.findall("./template:items[@save='1']/template:text", self.namespaces)
+                # Extract items directly with their attributes using ElementTree's API
+                visible_items = []
+                saved_values = []
+                
+                # Get all items elements first
+                items_elements = field.findall("./template:items", self.namespaces)
+                for items_elem in items_elements:
+                    is_hidden = items_elem.get("presence") == "hidden"
+                    is_saved = items_elem.get("save") == "1"
+                    
+                    # Get text elements within this items element
+                    for text_elem in items_elem.findall("./template:text", self.namespaces):
+                        if is_saved:
+                            saved_values.append(text_elem)
+                        elif not is_hidden:
+                            visible_items.append(text_elem)
 
                 # Ensure correct mapping of labels and values
                 list_items = []
                 for index, item in enumerate(visible_items):
                     value = saved_values[index].text if index < len(saved_values) else item.text
                     if item.text:
-                        list_items.append({"text": item.text.strip(), "value": value.strip()})
+                        list_items.append({
+                            "text": item.text.strip(),
+                            "value": value.strip(),
+                            "name": value.strip()
+                        })
 
                 field_obj["listItems"] = list_items
             
@@ -814,7 +876,6 @@ class XDPParser:
                     "type": "text-input",  # Overriding from "signature" to "text-input"
                     "label": label if label else None,
                     "styles": None,
-                    "helpText": help_text,
                     "inputType": "text",
                     "codeContext": {
                         "name": field_name.lower().replace(" ", "_")  # Ensuring name consistency
@@ -1013,7 +1074,6 @@ function {method_name}(fieldId) {{
                     "type": "group",
                     "id": self.next_id(),
                     "label": None,
-                    "helpText": None,
                     "styles": None,
                     "codeContext": {
                         "name": subform_name
