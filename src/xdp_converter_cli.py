@@ -16,6 +16,7 @@ sys.path.insert(0, project_root)
 
 from src.filename_generator import REPORT_DIR, INPUT_DIR, OUTPUT_DIR, generate_filename
 from src.oberon_converter_class import OberonParser
+from src.xml_converter import XDPConverter
 import platform
 
 # Configure logging
@@ -108,6 +109,27 @@ def convert_xml_to_json(input_path, mapping_path, output_path=None):
         logger.error(f"Error converting XML to JSON: {e}")
         return False
 
+def convert_xdp_to_json(input_path, mapping_path, output_path=None):
+    """Convert XDP to JSON"""
+    try:
+        # Initialize converter
+        logger.info(f"Initializing converter for {input_path}")
+        converter = XDPConverter(mapping_path)
+        
+        # Process the XDP file
+        logger.info("Processing XDP file...")
+        success = converter.process_file(input_path, output_path)
+        
+        if not success:
+            logger.error("Failed to process XDP file")
+            return False
+        
+        logger.info(f"Conversion completed successfully! Output saved to {output_path or 'auto-generated path'}")
+        return True
+    except Exception as e:
+        logger.error(f"Error converting XDP to JSON: {e}")
+        return False
+
 def run_conversion():
     """Interactive conversion of a single file"""
     file_path = inquirer.filepath(message="Select a file to convert:").execute()
@@ -125,14 +147,8 @@ def run_conversion():
         success = convert_xml_to_json(file_path, None, None)
     else:
         # Use XDP converter for XDP files
-        python_cmd = "python3" if os.name != "nt" else "python"
-        script_path = os.path.join("src", "xml_converter.py")
-        result = subprocess.run([
-            python_cmd, script_path, 
-            "-f", os.path.normpath(file_path), 
-            "-o", os.path.normpath(output_dir)
-        ])
-        success = result.returncode == 0
+        output_path = os.path.join(output_dir, os.path.splitext(os.path.basename(file_path))[0] + '.json')
+        success = convert_xdp_to_json(file_path, None, output_path)
 
     time.sleep(1)  
 
@@ -189,16 +205,10 @@ def batch_process():
         convert_xml_to_json(input_path, None, None)
 
     # Process XDP files
-    python_cmd = "python3" if os.name != "nt" else "python"
-    script_path = os.path.join("src", "xml_converter.py")
-    result = subprocess.run([
-        python_cmd, script_path,
-        "--input-dir", input_dir,
-        "--output-dir", output_dir
-    ], capture_output=True, text=True)
-
-    # If batch processing failed, exit early
-    if result.returncode != 0:
+    converter = XDPConverter()
+    files_processed = converter.process_directory(input_dir, output_dir)
+    
+    if files_processed == 0:
         print("\n❌ Batch processing failed! Please check the logs for details.\n")
         return
 
@@ -304,14 +314,7 @@ def main():
         if ext.lower() == '.xml':
             success = convert_xml_to_json(input_path, mapping_path, output_path)
         else:
-            python_cmd = "python3" if os.name != "nt" else "python"
-            script_path = os.path.join("src", "xml_converter.py")
-            result = subprocess.run([
-                python_cmd, script_path,
-                "-f", input_path,
-                "-o", output_path if output_path else OUTPUT_DIR
-            ])
-            success = result.returncode == 0
+            success = convert_xdp_to_json(input_path, mapping_path, output_path)
         
         sys.exit(0 if success else 1)
     
@@ -331,15 +334,10 @@ def main():
             convert_xml_to_json(input_path, None, None)
         
         # Process XDP files
-        python_cmd = "python3" if os.name != "nt" else "python"
-        script_path = os.path.join("src", "xml_converter.py")
-        result = subprocess.run([
-            python_cmd, script_path,
-            "--input-dir", input_dir,
-            "--output-dir", output_dir
-        ])
+        converter = XDPConverter()
+        files_processed = converter.process_directory(input_dir, output_dir)
         
-        sys.exit(0 if result.returncode == 0 else 1)
+        sys.exit(0 if files_processed > 0 else 1)
 
 if __name__ == "__main__":
     main()
