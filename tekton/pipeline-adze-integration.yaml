@@ -1,0 +1,15 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: adze-integration-pipeline
+spec:
+  params:
+    - name: image-url
+      type: string
+  tasks:
+    - name: sysdig-scan
+      taskRef:
+        name: sysdig-inline-scan
+      params:
+        - name: image-url
+          value: $(params.image-url)
