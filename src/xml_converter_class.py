@@ -524,10 +524,20 @@ class XDPParser:
                     label = text_value
                     text_value = None  # Don't use the same text as both label and value
             
+            # Check if this is a textEdit field
+            is_text_edit = False
+            ui_elem = draw.find(".//template:ui", self.namespaces)
+            if ui_elem is not None:
+                text_edit_elem = ui_elem.find(".//template:textEdit", self.namespaces)
+                if text_edit_elem is not None:
+                    is_text_edit = True
+            
             # Determine field type - use mapping if available
             field_type = "generic_text_display"
             if mapping and mapping.get("fieldType"):
                 field_type = mapping.get("fieldType")
+            elif is_text_edit:
+                field_type = "text-input"
             elif "foi" in draw_name.lower():
                 field_type = "foi_statement"
             elif text_value:
@@ -535,8 +545,11 @@ class XDPParser:
                 if "personal information" in text_lower or "freedom of information" in text_lower:
                     field_type = "foi_statement"
                 # Check if this should be a text input based on field name or text content
-                elif any(indicator in draw_name.lower() for indicator in ["file", "program", "document", "reference", "number"]):
+                elif any(indicator in draw_name.lower() for indicator in ["file", "program", "document", "reference", "number", "input", "field", "data"]):
                     field_type = "text-input"
+            # Check if this field is part of a group or table structure
+            elif self.is_part_of_group_or_table(draw):
+                field_type = "text-input"
             
             # Create field object based on type
             if field_type == "text-input":
@@ -552,6 +565,10 @@ class XDPParser:
                     "placeholder": None,
                     "inputType": "text"
                 }
+                
+                # If this is a textEdit field with a default value, add it
+                if is_text_edit and text_value:
+                    field_obj["value"] = text_value
             else:
                 # Create text-info field
                 field_obj = {
@@ -1240,3 +1257,26 @@ function {method_name}(fieldId) {{
         except Exception as e:
             print(f"Error extracting text from exData: {e}")
             return None
+
+    def is_part_of_group_or_table(self, element):
+        """Check if an element is part of a group or table structure"""
+        try:
+            # Get the parent element
+            parent = element.getparent()
+            if parent is None:
+                return False
+                
+            # Check if parent is a subform (group) or table
+            parent_tag = parent.tag.split('}')[-1] if '}' in parent.tag else parent.tag
+            if parent_tag in ['subform', 'table']:
+                return True
+                
+            # Check if parent has a name that suggests it's a group or table
+            parent_name = parent.attrib.get("name", "").lower()
+            if any(indicator in parent_name for indicator in ["group", "table", "grid", "row", "column", "cell"]):
+                return True
+                
+            # Recursively check parent's parent
+            return self.is_part_of_group_or_table(parent)
+        except Exception:
+            return False
