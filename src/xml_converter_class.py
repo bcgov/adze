@@ -1037,13 +1037,8 @@ class XDPParser:
                         # Handle regular field reference
                         script = script.replace(f"{ref}.", f"formStates['{ref}']")
             
-            # Create the JavaScript method
-            js_method = f"""
-function {method_name}(fieldId) {{
-    const field = document.getElementById(fieldId);
-    {script}
-}}
-"""
+            # Create the JavaScript method as a single line
+            js_method = f"function {method_name}(fieldId) {{ const field = document.getElementById(fieldId); {script} }}"
             return js_method
         except Exception as e:
             print(f"Error converting Adobe script: {e}")
