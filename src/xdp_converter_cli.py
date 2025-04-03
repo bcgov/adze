@@ -191,9 +191,9 @@ def batch_process():
         print("Ensure there are valid files before running batch processing.\n")
         return
 
-    # Ensure output directory exists
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Ensure output and report directories exist
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(REPORT_DIR, exist_ok=True)  # 🔹 FIX: Ensure report directory exists
 
     # Capture existing files before processing
     existing_outputs = set(os.listdir(output_dir))
