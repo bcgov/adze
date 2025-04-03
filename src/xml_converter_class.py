@@ -1091,7 +1091,11 @@ class XDPParser:
                     },
                     "repeater": True,
                     "conditions": conditions,
-                    "items": []
+                    "groupItems": [
+                        {
+                            "fields": []
+                        }
+                    ]
                 }
                 
                 # Process direct child fields in this subform (not descendants)
@@ -1103,7 +1107,7 @@ class XDPParser:
                             field_obj["conditions"].extend(conditions)
                         # Add subform name to codeContext for field identification
                         field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                        group_obj["items"].append(field_obj)
+                        group_obj["groupItems"][0]["fields"].append(field_obj)
 
                 # Process direct child draw elements (not descendants)
                 for draw in subform.findall("./template:draw", self.namespaces):
@@ -1116,7 +1120,7 @@ class XDPParser:
                             draw_obj["conditions"].extend(conditions)
                         # Add subform name to codeContext for draw identification
                         draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                        group_obj["items"].append(draw_obj)
+                        group_obj["groupItems"][0]["fields"].append(draw_obj)
 
                 # Process direct child subforms (not descendants)
                 for nested_subform in subform.findall("./template:subform", self.namespaces):
@@ -1127,7 +1131,7 @@ class XDPParser:
                             if "conditions" not in nested_group:
                                 nested_group["conditions"] = []
                             nested_group["conditions"].extend(conditions)
-                        group_obj["items"].append(nested_group)
+                        group_obj["groupItems"][0]["fields"].append(nested_group)
 
                 # Add the group to all_items and return it
                 self.all_items.append(group_obj)
