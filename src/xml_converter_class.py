@@ -556,19 +556,20 @@ class XDPParser:
                 field_obj = {
                     "type": "text-input",
                     "id": self.next_id(),
-                    "label": label,
+                    "label": text_value,  # Set text value as label
                     "styles": None,
                     "mask": None,
                     "codeContext": {
                         "name": draw_name
                     },
                     "placeholder": None,
-                    "inputType": "text"
+                    "inputType": "text",
+                    "value": ""  # Ensure value is empty
                 }
                 
                 # If this is a textEdit field with a default value, add it
                 if is_text_edit and text_value:
-                    field_obj["value"] = text_value
+                    field_obj["value"] = ""  # Keep value empty even for textEdit fields
             else:
                 # Create text-info field
                 field_obj = {
