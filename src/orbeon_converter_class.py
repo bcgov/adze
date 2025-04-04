@@ -412,6 +412,16 @@ class OrbeonParser:
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
             
+            # Check for file upload bindings
+            file_upload_elem = self.root.find(f".//fr:attachment[@bind='{field_name}-bind']", self.namespaces)
+            if file_upload_elem is not None:
+                return "file"
+            
+            # Check for file upload in form instance
+            file_instance = self.form_instance.find(f".//{field_name}", self.namespaces)
+            if file_instance is not None and (file_instance.get('mediatype') or file_instance.get('filename')):
+                return "file"
+            
             # Check if field is formReady (special case for boolean field that should be a radio)
             if field_name == "formReady":
                 return "radio"
@@ -464,6 +474,10 @@ class OrbeonParser:
                     appearance = select1_elem.get("appearance", "")
                     if appearance == "full":
                         return "radio"
+                    # Check for specific field names that should be radio buttons
+                    if any(radio_indicator in field_name.lower() for radio_indicator in ['yesno', 'truefalse', 'formready']):
+                        return "radio"
+                    # Default to dropdown
                     return "dropdown"
                 
                 # Check for textarea elements
