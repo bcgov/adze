@@ -412,6 +412,16 @@ class OrbeonParser:
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
             
+            # Check for file upload bindings
+            file_upload_elem = self.root.find(f".//fr:attachment[@bind='{field_name}-bind']", self.namespaces)
+            if file_upload_elem is not None:
+                return "file"
+            
+            # Check for file upload in form instance
+            file_instance = self.form_instance.find(f".//{field_name}", self.namespaces)
+            if file_instance is not None and (file_instance.get('mediatype') or file_instance.get('filename')):
+                return "file"
+            
             # Check if field is formReady (special case for boolean field that should be a radio)
             if field_name == "formReady":
                 return "radio"
@@ -464,6 +474,10 @@ class OrbeonParser:
                     appearance = select1_elem.get("appearance", "")
                     if appearance == "full":
                         return "radio"
+                    # Check for specific field names that should be radio buttons
+                    if any(radio_indicator in field_name.lower() for radio_indicator in ['yesno', 'truefalse', 'formready']):
+                        return "radio"
+                    # Default to dropdown
                     return "dropdown"
                 
                 # Check for textarea elements
@@ -532,8 +546,8 @@ class OrbeonParser:
         if bind_info and 'attributes' in bind_info:
             bind_attrs = bind_info['attributes']
             
-            # Handle required validation
-            if bind_attrs.get('required') == 'true()':
+            # Handle required validation from XML bind attributes
+            if bind_attrs.get('required') == 'true()' or bind_attrs.get('required') == 'true':
                 validation_rules.append({
                     "type": "required",
                     "value": True,
@@ -560,6 +574,20 @@ class OrbeonParser:
                     "type": "max",
                     "value": bind_attrs['max'],
                     "errorMessage": bind_attrs.get('xxf:max-message', f"Value must be at most {bind_attrs['max']}")
+                })
+            
+            # Handle minLength/maxLength validation
+            if 'minLength' in bind_attrs:
+                validation_rules.append({
+                    "type": "minLength",
+                    "value": bind_attrs['minLength'],
+                    "errorMessage": bind_attrs.get('xxf:minLength-message', f"Value must be at least {bind_attrs['minLength']} characters")
+                })
+            if 'maxLength' in bind_attrs:
+                validation_rules.append({
+                    "type": "maxLength",
+                    "value": bind_attrs['maxLength'],
+                    "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                 })
         
         # Get label and hint from form resources
@@ -593,12 +621,11 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "placeholder": None,
-                "inputType": "text"
+                "inputType": "text",
+                "validation": validation_rules
             }
             if field_value:
                 field_obj["value"] = field_value
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "text-area":
             field_obj = {
                 "type": "text-area",
@@ -608,12 +635,11 @@ class OrbeonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": None
+                "placeholder": None,
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "date":
             field_obj = {
                 "type": "date",
@@ -640,10 +666,9 @@ class OrbeonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "value": field_value == "true" if field_value is not None else False
+                "value": field_value == "true" if field_value is not None else False,
+                "validation": validation_rules
             }
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "radio":
             field_obj = {
                 "type": "radio",
@@ -654,12 +679,11 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "listItems": [],
-                "direction": "vertical"
+                "direction": "vertical",
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "dropdown":
             field_obj = {
                 "id": self.next_id(),
@@ -676,12 +700,11 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "placeholder": "",
-                "selectionFeedback": "top-after-reopen"
+                "selectionFeedback": "top-after-reopen",
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "signature":
             field_obj = {
                 "type": "signature",
@@ -690,12 +713,11 @@ class OrbeonParser:
                 "styles": None,
                 "codeContext": {
                     "name": field_name
-                }
+                },
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "email":
             field_obj = {
                 "type": "text-input",
@@ -707,12 +729,11 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "placeholder": "example@example.com",
-                "inputType": "email"
+                "inputType": "email",
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "phone":
             field_obj = {
                 "type": "text-input",
@@ -724,12 +745,11 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "placeholder": "(123) 456-7890",
-                "inputType": "tel"
+                "inputType": "tel",
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "address":
             field_obj = {
                 "type": "text-area",
@@ -739,12 +759,11 @@ class OrbeonParser:
                 "codeContext": {
                     "name": field_name
                 },
-                "placeholder": "Street address"
+                "placeholder": "Street address",
+                "validation": validation_rules
             }
             if field_value and field_value.strip():
                 field_obj["value"] = field_value.strip()
-            if validation_rules:
-                field_obj["validation"] = validation_rules
         elif field_type == "file":
             field_obj = {
                 "type": "file",
@@ -769,13 +788,17 @@ class OrbeonParser:
         # Apply any additional mappings
         if mapping:
             if mapping.get("required"):
-                field_obj["required"] = mapping.get("required")
+                if "validation" not in field_obj:
+                    field_obj["validation"] = []
+                field_obj["validation"].append({
+                    "type": "required",
+                    "value": True,
+                    "errorMessage": "This field is required"
+                })
             if mapping.get("validation"):
-                # Merge validation rules from mapping with existing ones
-                if "validation" in field_obj:
-                    field_obj["validation"].extend(mapping.get("validation", []))
-                else:
-                    field_obj["validation"] = mapping.get("validation", [])
+                if "validation" not in field_obj:
+                    field_obj["validation"] = []
+                field_obj["validation"].extend(mapping.get("validation", []))
             if mapping.get("label"):
                 field_obj["label"] = mapping.get("label")
             if mapping.get("helpText"):
