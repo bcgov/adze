@@ -942,6 +942,34 @@ class XDPParser:
                                     "Error processing field element")
             return None
     
+    def _clean_escape_characters(self, text):
+        """Clean up escape characters in JavaScript text"""
+        try:
+            # Replace common escape sequences with their actual characters
+            replacements = {
+                '\\n': ' ',  # Replace newlines with spaces
+                '\\t': ' ',  # Replace tabs with spaces
+                '\\r': ' ',  # Replace carriage returns with spaces
+                '\\"': '"',  # Replace escaped quotes with actual quotes
+                "\\'": "'",  # Replace escaped single quotes with actual single quotes
+                '\\\\': '\\' # Replace double backslashes with single backslash
+            }
+            
+            # Apply replacements
+            for old, new in replacements.items():
+                text = text.replace(old, new)
+            
+            # Remove any remaining escape characters
+            text = text.replace('\\', '')
+            
+            # Clean up multiple spaces
+            text = ' '.join(text.split())
+            
+            return text
+        except Exception as e:
+            print(f"Error cleaning escape characters: {e}")
+            return text
+
     def process_script(self, field, event_name="initialize"):
         """Process script tags and convert Adobe JavaScript to standard JavaScript"""
         try:
@@ -975,8 +1003,11 @@ class XDPParser:
                 
                 script_text = script_tag.text
                 if script_text:
+                    # Clean up escape characters in the script text
+                    cleaned_script = self._clean_escape_characters(script_text)
+                    
                     # Convert the script
-                    converted_script = self.convert_adobe_script(script_text, field_id, event_name)
+                    converted_script = self.convert_adobe_script(cleaned_script, field_id, event_name)
                     if converted_script:
                         # Add to JavaScript section
                         self.javascript_section[field_id] = converted_script
