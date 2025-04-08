@@ -223,18 +223,42 @@ class OrbeonParser:
             # Get section label
             section_label = self.get_field_label(section_name)
             
-            # Create section object
+            # Check if this is a repeater section by looking for template instance
+            is_repeater = False
+            template_instance = self.root.find(f".//xf:instance[@id='{section_name}-template']", self.namespaces)
+            if template_instance is not None:
+                is_repeater = True
+            
+            # Create section object as a group
             if section_label:
                 section_obj = {
-                    "type": "text-info",
+                    "type": "group",
                     "id": self.next_id(),
                     "label": section_label,
+                    "styles": None,
                     "codeContext": {
                         "name": section_name
                     },
-                    "value": section_label
+                    "repeater": is_repeater,
+                    "conditions": [],
+                    "groupItems": [
+                        {
+                            "fields": []
+                        }
+                    ]
                 }
                 self.all_items.append(section_obj)
+            
+            # If this is a repeater, process the template instance first
+            if is_repeater and template_instance is not None:
+                template_section = template_instance.find(f".//{section_name}-iteration", self.namespaces)
+                if template_section is not None:
+                    for grid in template_section:
+                        if grid.tag.startswith("grid-"):
+                            for field_elem in grid:
+                                field_obj = self.process_field(field_elem)
+                                if field_obj:
+                                    section_obj["groupItems"][0]["fields"].append(field_obj)
             
             # Process each grid in the section
             for grid in section:
@@ -244,7 +268,7 @@ class OrbeonParser:
                 if not grid_name.startswith("grid-"):
                     field_obj = self.process_field(grid)
                     if field_obj:
-                        self.all_items.append(field_obj)
+                        section_obj["groupItems"][0]["fields"].append(field_obj)
                     continue
                 
                 self.add_breadcrumb(grid_name)
@@ -256,13 +280,13 @@ class OrbeonParser:
                 if iterations:
                     # This is a repeating grid
                     for iteration in iterations:
-                        self.process_grid_iteration(iteration)
+                        self.process_grid_iteration(iteration, section_obj)
                 else:
                     # Regular grid with fields
                     for field_elem in grid:
                         field_obj = self.process_field(field_elem)
                         if field_obj:
-                            self.all_items.append(field_obj)
+                            section_obj["groupItems"][0]["fields"].append(field_obj)
                 
                 self.remove_breadcrumb(grid_name)
             
@@ -283,13 +307,18 @@ class OrbeonParser:
         except Exception as e:
             print(f"Error processing section {section.tag if hasattr(section, 'tag') else 'unknown'}: {e}")
     
-    def process_grid_iteration(self, iteration):
+    def process_grid_iteration(self, iteration, parent_group=None):
         try:
             """Process a grid iteration (repeating fields)"""
+            iteration_fields = []
             for field_elem in iteration:
                 field_obj = self.process_field(field_elem)
                 if field_obj:
-                    self.all_items.append(field_obj)
+                    iteration_fields.append(field_obj)
+            
+            if parent_group and iteration_fields:
+                # Add the iteration fields to the parent group's fields
+                parent_group["groupItems"][0]["fields"].extend(iteration_fields)
         except Exception as e:
             print(f"Error processing grid iteration: {e}")
     
@@ -409,8 +438,8 @@ class OrbeonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
-            # Skip grid elements
-            if field_name.startswith("grid-"):
+            # Skip grid elements and section iterations
+            if field_name.startswith("grid-") or field_name.endswith("-iteration"):
                 return None
             
             # Check mapping first
@@ -420,11 +449,6 @@ class OrbeonParser:
             # Check for file upload fields
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
-            
-            # Check for number fields
-            number_elem = self.root.find(f".//fr:number[@bind='{field_name}-bind']", self.namespaces)
-            if number_elem is not None:
-                return "number-input"
             
             # Check for file upload bindings
             file_upload_elem = self.root.find(f".//fr:attachment[@bind='{field_name}-bind']", self.namespaces)
@@ -832,21 +856,6 @@ class OrbeonParser:
             }
             if field_value:
                 field_obj["value"] = field_value
-        elif field_type == "number-input":
-            field_obj = {
-                "type": "number-input",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": None,
-                "inputType": "number",
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
         
         # Apply any additional mappings
         if mapping:
