@@ -421,6 +421,11 @@ class OrbeonParser:
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
             
+            # Check for number fields
+            number_elem = self.root.find(f".//fr:number[@bind='{field_name}-bind']", self.namespaces)
+            if number_elem is not None:
+                return "number-input"
+            
             # Check for file upload bindings
             file_upload_elem = self.root.find(f".//fr:attachment[@bind='{field_name}-bind']", self.namespaces)
             if file_upload_elem is not None:
@@ -446,6 +451,11 @@ class OrbeonParser:
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
+                
+                # Check for dropdown-select1 elements first
+                dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
+                if dropdown_select1_elem is not None:
+                    return "dropdown"
                 
                 # Check if it's a radio button by looking for items with labels and values
                 # First check in the field element itself
@@ -485,6 +495,11 @@ class OrbeonParser:
                 checkbox_input_elem = self.root.find(f".//fr:checkbox-input[@bind='{field_name}-bind']", self.namespaces)
                 if checkbox_input_elem is not None:
                     return "checkbox"
+                
+                # Check for dropdown-select1 elements (treat as dropdowns)
+                dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
+                if dropdown_select1_elem is not None:
+                    return "dropdown"
                 
                 # Check for select1 elements (dropdowns or radio buttons)
                 select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
@@ -817,6 +832,21 @@ class OrbeonParser:
             }
             if field_value:
                 field_obj["value"] = field_value
+        elif field_type == "number-input":
+            field_obj = {
+                "type": "number-input",
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": None,
+                "inputType": "number",
+                "validation": validation_rules
+            }
+            if field_value and field_value.strip():
+                field_obj["value"] = field_value.strip()
         
         # Apply any additional mappings
         if mapping:
