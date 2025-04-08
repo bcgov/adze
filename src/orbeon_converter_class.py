@@ -357,6 +357,15 @@ class OrbeonParser:
                     # Convert boolean string to actual value
                     if field_value is not None:
                         field_obj["value"] = field_value.lower() == "true"
+                # Special handling for yesno-input fields
+                elif field_type == "radio" and self.root.find(f".//fr:yesno-input[@bind='{field_name}-bind']", self.namespaces) is not None:
+                    field_obj["listItems"] = [
+                        {"text": "Yes", "value": "true", "name": "Yes"},
+                        {"text": "No", "value": "false", "name": "No"}
+                    ]
+                    # Convert boolean string to actual value
+                    if field_value is not None:
+                        field_obj["value"] = field_value.lower() == "true"
                 else:
                     options = self.extract_dropdown_options(field_elem)
                     if options:
@@ -462,6 +471,16 @@ class OrbeonParser:
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
             if bind_elem is not None:
+                # Check for yesno-input elements
+                yesno_elem = self.root.find(f".//fr:yesno-input[@bind='{field_name}-bind']", self.namespaces)
+                if yesno_elem is not None:
+                    return "radio"
+                
+                # Check for button elements
+                button_elem = self.root.find(f".//xf:trigger[@bind='{field_name}-bind']", self.namespaces)
+                if button_elem is not None:
+                    return "button"
+                
                 # Check for checkbox-input elements first
                 checkbox_input_elem = self.root.find(f".//fr:checkbox-input[@bind='{field_name}-bind']", self.namespaces)
                 if checkbox_input_elem is not None:
@@ -784,6 +803,20 @@ class OrbeonParser:
                 field_obj["filename"] = field_attributes.get('filename')
             if field_attributes.get('size'):
                 field_obj["size"] = field_attributes.get('size')
+        elif field_type == "button":
+            field_obj = {
+                "type": "button",
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "buttonType": "submit",
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
         
         # Apply any additional mappings
         if mapping:
