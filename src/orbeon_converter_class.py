@@ -229,9 +229,9 @@ class OrbeonParser:
             if template_instance is not None:
                 is_repeater = True
             
-            # Create section object as a group
+            # Create section object as a group only if it's a repeater
             section_obj = None
-            if section_label:
+            if section_label and is_repeater:
                 section_obj = {
                     "type": "group",
                     "id": self.next_id(),
@@ -240,7 +240,7 @@ class OrbeonParser:
                     "codeContext": {
                         "name": section_name
                     },
-                    "repeater": is_repeater,
+                    "repeater": True,
                     "conditions": [],
                     "groupItems": [
                         {
@@ -296,6 +296,42 @@ class OrbeonParser:
                                 section_obj["groupItems"][0]["fields"].append(field_obj)
                     
                     self.remove_breadcrumb(grid_name)
+            else:
+                # For non-repeater sections, process fields directly
+                for grid in section:
+                    grid_name = grid.tag
+                    
+                    # Skip processing if this is not a grid element
+                    if not grid_name.startswith("grid-"):
+                        field_obj = self.process_field(grid)
+                        if field_obj:
+                            if parent_section:
+                                parent_section["groupItems"][0]["fields"].append(field_obj)
+                            else:
+                                self.all_items.append(field_obj)
+                        continue
+                    
+                    self.add_breadcrumb(grid_name)
+                    
+                    # Handle grid iterations differently (they can contain repeating fields)
+                    iteration_tag = f"{grid_name}-iteration"
+                    iterations = grid.findall(f"./{iteration_tag}", self.namespaces)
+                    
+                    if iterations:
+                        # This is a repeating grid
+                        for iteration in iterations:
+                            self.process_grid_iteration(iteration, parent_section)
+                    else:
+                        # Regular grid with fields
+                        for field_elem in grid:
+                            field_obj = self.process_field(field_elem)
+                            if field_obj:
+                                if parent_section:
+                                    parent_section["groupItems"][0]["fields"].append(field_obj)
+                                else:
+                                    self.all_items.append(field_obj)
+                    
+                    self.remove_breadcrumb(grid_name)
             
             # Check if there are nested sections (like section-child-information within section-a)
             nested_sections = False
@@ -305,10 +341,10 @@ class OrbeonParser:
                     break
             
             # If this section has nested sections, process them separately
-            if nested_sections and section_obj is not None:
+            if nested_sections:
                 for nested_section in section:
                     if nested_section.tag.startswith("section-"):
-                        self.process_section(nested_section, section_obj)
+                        self.process_section(nested_section, section_obj if section_obj else parent_section)
             
             self.remove_breadcrumb(section_name)
         except Exception as e:
