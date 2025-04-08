@@ -214,7 +214,7 @@ class OrbeonParser:
         except Exception as e:
             print(f"Error processing form sections: {e}")
     
-    def process_section(self, section):
+    def process_section(self, section, parent_section=None):
         try:
             """Process a section in the form"""
             section_name = section.tag
@@ -247,7 +247,12 @@ class OrbeonParser:
                         }
                     ]
                 }
-                self.all_items.append(section_obj)
+                
+                # Add to parent section if exists, otherwise add to root items
+                if parent_section:
+                    parent_section["groupItems"][0]["fields"].append(section_obj)
+                else:
+                    self.all_items.append(section_obj)
             
             # If this is a repeater, process the template instance first
             if is_repeater and template_instance is not None:
@@ -301,7 +306,7 @@ class OrbeonParser:
             if nested_sections:
                 for nested_section in section:
                     if nested_section.tag.startswith("section-"):
-                        self.process_section(nested_section)
+                        self.process_section(nested_section, section_obj)
             
             self.remove_breadcrumb(section_name)
         except Exception as e:
@@ -327,6 +332,10 @@ class OrbeonParser:
             """Process a field element"""
             field_name = field_elem.tag
             field_value = None
+            
+            # Skip section elements as they are handled separately
+            if field_name.startswith("section-"):
+                return None
             
             # For text-info fields, first check form instance for text content
             form_instance_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
