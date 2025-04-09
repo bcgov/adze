@@ -275,7 +275,10 @@ class OrbeonParser:
                     if not grid_name.startswith("grid-"):
                         field_obj = self.process_field(grid)
                         if field_obj:
-                            section_obj["groupItems"][0]["fields"].append(field_obj)
+                            if isinstance(field_obj, list):
+                                section_obj["groupItems"][0]["fields"].extend(field_obj)
+                            else:
+                                section_obj["groupItems"][0]["fields"].append(field_obj)
                         continue
                     
                     self.add_breadcrumb(grid_name)
@@ -293,7 +296,10 @@ class OrbeonParser:
                         for field_elem in grid:
                             field_obj = self.process_field(field_elem)
                             if field_obj:
-                                section_obj["groupItems"][0]["fields"].append(field_obj)
+                                if isinstance(field_obj, list):
+                                    section_obj["groupItems"][0]["fields"].extend(field_obj)
+                                else:
+                                    section_obj["groupItems"][0]["fields"].append(field_obj)
                     
                     self.remove_breadcrumb(grid_name)
             else:
@@ -357,7 +363,10 @@ class OrbeonParser:
             for field_elem in iteration:
                 field_obj = self.process_field(field_elem)
                 if field_obj:
-                    iteration_fields.append(field_obj)
+                    if isinstance(field_obj, list):
+                        iteration_fields.extend(field_obj)
+                    else:
+                        iteration_fields.append(field_obj)
             
             if parent_group and iteration_fields:
                 # Add the iteration fields to the parent group's fields
@@ -406,21 +415,50 @@ class OrbeonParser:
             explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
             if explanation_elem is not None:
                 field_type = "text-info"
-                # Get text content from form resources
-                text_ref = explanation_elem.find(".//fr:text", self.namespaces)
-                if text_ref is not None:
-                    # Extract the reference path
-                    ref_path = text_ref.get("ref")
-                    if ref_path and ref_path.startswith("$form-resources/"):
-                        # Remove the $form-resources/ prefix
-                        ref_path = ref_path[len("$form-resources/"):]
-                        # Find the text in form resources
-                        resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
-                        if resource_text is not None:
-                            field_value = resource_text.text
             
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
+            
+            # Special handling for radio-with-other fields
+            if field_type == "radio-with-other":
+                # Create the radio field
+                radio_field = self.create_field_object("radio", field_name, field_value, field_attributes, mapping)
+                
+                # Extract items from the form resources
+                items = []
+                itemset = self.root.find(f".//fr:open-select1[@bind='{field_name}-bind']/xf:itemset", self.namespaces)
+                if itemset is not None:
+                    for item in self.form_resources.findall(f".//{field_name}/item", self.namespaces):
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text and value is not None and value.text:
+                            items.append({
+                                "text": label.text.strip(),
+                                "value": value.text.strip(),
+                                "name": value.text.strip()
+                            })
+                
+                # Add the original items plus "Other" option
+                radio_field["listItems"] = items + [{
+                    "text": "Other",
+                    "value": "other",
+                    "name": "Other"
+                }]
+                
+                # Create the text input field for "Other"
+                other_field = self.create_field_object("text-input", f"{field_name}-other", None, {}, None)
+                other_field["label"] = "Other"
+                other_field["placeholder"] = "Please specify"
+                
+                # Add both fields directly to all_items
+                self.all_items.append(radio_field)
+                self.all_items.append(other_field)
+                
+                # Report success for both fields
+                self.Report.report_success(field_name, "radio", radio_field.get("label", ""))
+                self.Report.report_success(f"{field_name}-other", "text-input", other_field.get("label", ""))
+                
+                return None
             
             # Process dropdown or radio options
             if field_type == "dropdown" or field_type == "radio":
@@ -446,30 +484,6 @@ class OrbeonParser:
                     options = self.extract_dropdown_options(field_elem)
                     if options:
                         field_obj["listItems"] = options
-            
-            # Process checkbox value
-            if field_type == "checkbox":
-                # Check for explicit value in XML
-                value_elem = field_elem.find(".//value", self.namespaces)
-                if value_elem is not None and value_elem.text:
-                    field_obj["value"] = value_elem.text.lower() == "true"
-                else:
-                    # Default to false if no value specified
-                    field_obj["value"] = False
-            
-            # Process date validation
-            if field_type == "date":
-                # Add specific validation rules based on field name
-                if "signed" in field_name.lower():
-                    field_obj["validation"].extend([
-                        {
-                            "type": "maxDate",
-                            "value": datetime.now().strftime("%Y-%m-%d"),
-                            "errorMessage": "Date cannot be in the future"
-                        }
-                    ])
-            
-            self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
                 self.Report.report_success(field_name, field_type, field_obj.get("label", ""))
@@ -522,6 +536,11 @@ class OrbeonParser:
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
+                
+                # Check for open-select1 elements (radio with other)
+                open_select1_elem = self.root.find(f".//fr:open-select1[@bind='{field_name}-bind']", self.namespaces)
+                if open_select1_elem is not None:
+                    return "radio-with-other"
                 
                 # Check for dropdown-select1 elements first
                 dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
