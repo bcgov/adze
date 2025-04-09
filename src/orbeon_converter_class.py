@@ -419,6 +419,38 @@ class OrbeonParser:
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
+            # Special handling for checkbox-group fields
+            if field_type == "checkbox-group":
+                # Get the control element from form resources
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    # Add the label as a text-info field
+                    label_elem = control_elem.find("label", self.namespaces)
+                    if label_elem is not None and label_elem.text:
+                        label_field = self.create_field_object("text-info", f"{field_name}-label", label_elem.text.strip(), {}, None)
+                        label_field["codeContext"] = {
+                            "name": f"{field_name}-label"
+                        }
+                        self.all_items.append(label_field)
+                        self.Report.report_success(f"{field_name}-label", "text-info", label_elem.text.strip())
+                    
+                    # Extract items from the form resources
+                    items = []
+                    for item in control_elem.findall(".//item", self.namespaces):
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text and value is not None and value.text:
+                            # Create a checkbox for each item
+                            checkbox = self.create_field_object("checkbox", f"{field_name}-{value.text}", None, {}, None)
+                            checkbox["label"] = label.text.strip()
+                            checkbox["codeContext"] = {
+                                "name": f"{field_name}-{value.text}"
+                            }
+                            self.all_items.append(checkbox)
+                            self.Report.report_success(f"{field_name}-{value.text}", "checkbox", label.text.strip())
+                
+                return None
+            
             # Special handling for radio-with-other fields
             if field_type == "radio-with-other":
                 # Create the radio field
@@ -541,6 +573,22 @@ class OrbeonParser:
                 open_select1_elem = self.root.find(f".//fr:open-select1[@bind='{field_name}-bind']", self.namespaces)
                 if open_select1_elem is not None:
                     return "radio-with-other"
+                
+                # Check for select elements with appearance="full" (multiple checkboxes)
+                select_elem = self.root.find(f".//xf:select[@bind='{field_name}-bind']", self.namespaces)
+                if select_elem is not None and select_elem.get("appearance") == "full":
+                    return "checkbox-group"
+                
+                # Check if this is a checkbox list by looking at the control element
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    # Check if it has multiple items
+                    items = control_elem.findall(".//item", self.namespaces)
+                    if items and len(items) > 1:
+                        # Check if there's a corresponding select element with appearance="full"
+                        select_elem = self.root.find(f".//xf:select[@bind='{field_name}-bind']", self.namespaces)
+                        if select_elem is not None and select_elem.get("appearance") == "full":
+                            return "checkbox-group"
                 
                 # Check for dropdown-select1 elements first
                 dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
