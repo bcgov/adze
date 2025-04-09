@@ -762,6 +762,28 @@ class OrbeonParser:
                     "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                 })
         
+        # Extract constraints from bind element
+        bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
+        if bind_elem is not None:
+            for constraint in bind_elem.findall(".//xf:constraint", self.namespaces):
+                constraint_value = constraint.get("value", "")
+                if "xxf:min-length" in constraint_value:
+                    # Extract the number from xxf:min-length(1)
+                    min_length = constraint_value.split("(")[1].split(")")[0]
+                    validation_rules.append({
+                        "type": "minLength",
+                        "value": int(min_length),
+                        "errorMessage": f"Value must be at least {min_length} characters"
+                    })
+                elif "xxf:max-length" in constraint_value:
+                    # Extract the number from xxf:max-length(3)
+                    max_length = constraint_value.split("(")[1].split(")")[0]
+                    validation_rules.append({
+                        "type": "maxLength",
+                        "value": int(max_length),
+                        "errorMessage": f"Value must be at most {max_length} characters"
+                    })
+        
         # Get label and hint from form resources
         label = self.get_field_label(field_name)
         hint = self.get_field_hint(field_name)
