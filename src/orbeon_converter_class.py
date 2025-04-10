@@ -419,6 +419,11 @@ class OrbeonParser:
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
             
+            # For text-info fields, set value to be the same as label if not already set
+            if field_type == "text-info" and field_obj is not None:
+                if not field_obj.get("value") and field_obj.get("label"):
+                    field_obj["value"] = field_obj["label"]
+            
             # Special handling for checkbox-group fields
             if field_type == "checkbox-group":
                 # Get the control element from form resources
@@ -1076,7 +1081,18 @@ class OrbeonParser:
             # Find the field's resource section
             field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
             if field_resource is not None:
-                # Look for label element
+                # First check for text element
+                text_elem = field_resource.find("text", self.namespaces)
+                if text_elem is not None and text_elem.text:
+                    # If text contains HTML, extract text content
+                    if "<div>" in text_elem.text:
+                        # Remove HTML tags and get text content
+                        import re
+                        text = re.sub('<[^<]+?>', '', text_elem.text)
+                        return text.strip()
+                    return text_elem.text.strip()
+                
+                # Then check for label element
                 label_elem = field_resource.find("label", self.namespaces)
                 if label_elem is not None and label_elem.text:
                     # If label contains HTML, extract text content
