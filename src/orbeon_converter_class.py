@@ -567,6 +567,16 @@ class OrbeonParser:
             if explanation_elem is not None:
                 return "text-info"
             
+            # Check for currency fields
+            currency_elem = self.root.find(f".//fr:currency[@bind='{field_name}-bind']", self.namespaces)
+            if currency_elem is not None:
+                return "number-input"
+            
+            # Check for number fields
+            number_elem = self.root.find(f".//fr:number[@bind='{field_name}-bind']", self.namespaces)
+            if number_elem is not None:
+                return "number-input"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
                 # Then check directly in the field element
@@ -666,11 +676,6 @@ class OrbeonParser:
                 date_elem = self.root.find(f".//fr:date[@bind='{field_name}-bind']", self.namespaces)
                 if date_elem is not None:
                     return "date"
-                
-                # Check for currency elements
-                currency_elem = self.root.find(f".//fr:currency[@bind='{field_name}-bind']", self.namespaces)
-                if currency_elem is not None:
-                    return "currency"
                 
                 # Check for checkbox elements - look for both input and checkbox elements
                 checkbox_elem = self.root.find(f".//xf:input[@bind='{field_name}-bind']", self.namespaces)
@@ -993,6 +998,21 @@ class OrbeonParser:
                     "name": field_name
                 },
                 "buttonType": "submit",
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
+        elif field_type == "number":
+            field_obj = {
+                "type": "number-input",
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": None,
                 "validation": validation_rules
             }
             if field_value:
