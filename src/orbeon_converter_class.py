@@ -214,7 +214,7 @@ class OrbeonParser:
         except Exception as e:
             print(f"Error processing form sections: {e}")
     
-    def process_section(self, section):
+    def process_section(self, section, parent_section=None):
         try:
             """Process a section in the form"""
             section_name = section.tag
@@ -223,48 +223,102 @@ class OrbeonParser:
             # Get section label
             section_label = self.get_field_label(section_name)
             
-            # Create section object
-            if section_label:
+            # Check if this is a repeater section by looking for template instance
+            is_repeater = False
+            template_instance = self.root.find(f".//xf:instance[@id='{section_name}-template']", self.namespaces)
+            if template_instance is not None:
+                is_repeater = True
+            
+            # Create section object as a group only if it's a repeater
+            section_obj = None
+            if section_label and is_repeater:
                 section_obj = {
-                    "type": "text-info",
+                    "type": "group",
                     "id": self.next_id(),
                     "label": section_label,
+                    "styles": None,
                     "codeContext": {
                         "name": section_name
                     },
-                    "value": section_label
+                    "repeater": True,
+                    "conditions": [],
+                    "groupItems": [
+                        {
+                            "fields": []
+                        }
+                    ]
                 }
-                self.all_items.append(section_obj)
-            
-            # Process each grid in the section
-            for grid in section:
-                grid_name = grid.tag
                 
-                # Skip processing if this is not a grid element
-                if not grid_name.startswith("grid-"):
-                    field_obj = self.process_field(grid)
-                    if field_obj:
-                        self.all_items.append(field_obj)
-                    continue
-                
-                self.add_breadcrumb(grid_name)
-                
-                # Handle grid iterations differently (they can contain repeating fields)
-                iteration_tag = f"{grid_name}-iteration"
-                iterations = grid.findall(f"./{iteration_tag}", self.namespaces)
-                
-                if iterations:
-                    # This is a repeating grid
-                    for iteration in iterations:
-                        self.process_grid_iteration(iteration)
+                # Add to parent section if exists, otherwise add to root items
+                if parent_section:
+                    parent_section["groupItems"][0]["fields"].append(section_obj)
                 else:
-                    # Regular grid with fields
-                    for field_elem in grid:
+                    self.all_items.append(section_obj)
+            
+            # If this is a repeater, process the template instance only
+            if is_repeater and template_instance is not None and section_obj is not None:
+                # Clear the fields array before adding new fields
+                section_obj["groupItems"][0]["fields"] = []
+                
+                # Process fields directly from the template instance
+                template_section = template_instance.find(f".//{section_name}-iteration", self.namespaces)
+                if template_section is not None:
+                    # Process all fields in the template section
+                    for field_elem in template_section:
                         field_obj = self.process_field(field_elem)
                         if field_obj:
-                            self.all_items.append(field_obj)
-                
-                self.remove_breadcrumb(grid_name)
+                            if isinstance(field_obj, list):
+                                section_obj["groupItems"][0]["fields"].extend(field_obj)
+                            else:
+                                section_obj["groupItems"][0]["fields"].append(field_obj)
+            # For non-repeater sections, process fields directly
+            elif not is_repeater:
+                for grid in section:
+                    grid_name = grid.tag
+                    
+                    # Skip processing if this is not a grid element
+                    if not grid_name.startswith("grid-"):
+                        field_obj = self.process_field(grid)
+                        if field_obj:
+                            if isinstance(field_obj, list):
+                                if parent_section:
+                                    parent_section["groupItems"][0]["fields"].extend(field_obj)
+                                else:
+                                    self.all_items.extend(field_obj)
+                            else:
+                                if parent_section:
+                                    parent_section["groupItems"][0]["fields"].append(field_obj)
+                                else:
+                                    self.all_items.append(field_obj)
+                        continue
+                    
+                    self.add_breadcrumb(grid_name)
+                    
+                    # Handle grid iterations differently (they can contain repeating fields)
+                    iteration_tag = f"{grid_name}-iteration"
+                    iterations = grid.findall(f"./{iteration_tag}", self.namespaces)
+                    
+                    if iterations:
+                        # This is a repeating grid
+                        for iteration in iterations:
+                            self.process_grid_iteration(iteration, parent_section)
+                    else:
+                        # Regular grid with fields
+                        for field_elem in grid:
+                            field_obj = self.process_field(field_elem)
+                            if field_obj:
+                                if isinstance(field_obj, list):
+                                    if parent_section:
+                                        parent_section["groupItems"][0]["fields"].extend(field_obj)
+                                    else:
+                                        self.all_items.extend(field_obj)
+                                else:
+                                    if parent_section:
+                                        parent_section["groupItems"][0]["fields"].append(field_obj)
+                                    else:
+                                        self.all_items.append(field_obj)
+                    
+                    self.remove_breadcrumb(grid_name)
             
             # Check if there are nested sections (like section-child-information within section-a)
             nested_sections = False
@@ -277,19 +331,27 @@ class OrbeonParser:
             if nested_sections:
                 for nested_section in section:
                     if nested_section.tag.startswith("section-"):
-                        self.process_section(nested_section)
+                        self.process_section(nested_section, section_obj if section_obj else parent_section)
             
             self.remove_breadcrumb(section_name)
         except Exception as e:
             print(f"Error processing section {section.tag if hasattr(section, 'tag') else 'unknown'}: {e}")
     
-    def process_grid_iteration(self, iteration):
+    def process_grid_iteration(self, iteration, parent_group=None):
         try:
             """Process a grid iteration (repeating fields)"""
+            iteration_fields = []
             for field_elem in iteration:
                 field_obj = self.process_field(field_elem)
                 if field_obj:
-                    self.all_items.append(field_obj)
+                    if isinstance(field_obj, list):
+                        iteration_fields.extend(field_obj)
+                    else:
+                        iteration_fields.append(field_obj)
+            
+            if parent_group and iteration_fields:
+                # Add the iteration fields to the parent group's fields
+                parent_group["groupItems"][0]["fields"].extend(iteration_fields)
         except Exception as e:
             print(f"Error processing grid iteration: {e}")
     
@@ -298,6 +360,10 @@ class OrbeonParser:
             """Process a field element"""
             field_name = field_elem.tag
             field_value = None
+            
+            # Skip section elements as they are handled separately
+            if field_name.startswith("section-"):
+                return None
             
             # For text-info fields, first check form instance for text content
             form_instance_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
@@ -330,21 +396,87 @@ class OrbeonParser:
             explanation_elem = self.root.find(f".//fr:explanation[@bind='{field_name}-bind']", self.namespaces)
             if explanation_elem is not None:
                 field_type = "text-info"
-                # Get text content from form resources
-                text_ref = explanation_elem.find(".//fr:text", self.namespaces)
-                if text_ref is not None:
-                    # Extract the reference path
-                    ref_path = text_ref.get("ref")
-                    if ref_path and ref_path.startswith("$form-resources/"):
-                        # Remove the $form-resources/ prefix
-                        ref_path = ref_path[len("$form-resources/"):]
-                        # Find the text in form resources
-                        resource_text = self.form_resources.find(f".//resource/{ref_path}", self.namespaces)
-                        if resource_text is not None:
-                            field_value = resource_text.text
             
             # Create the field object based on type
             field_obj = self.create_field_object(field_type, field_name, field_value, field_attributes, mapping)
+            
+            # For text-info fields, set value to be the same as label if not already set
+            if field_type == "text-info" and field_obj is not None:
+                if not field_obj.get("value") and field_obj.get("label"):
+                    field_obj["value"] = field_obj["label"]
+            
+            # Special handling for checkbox-group fields
+            if field_type == "checkbox-group":
+                # Get the control element from form resources
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    # Add the label as a text-info field
+                    label_elem = control_elem.find("label", self.namespaces)
+                    if label_elem is not None and label_elem.text:
+                        label_field = self.create_field_object("text-info", f"{field_name}-label", label_elem.text.strip(), {}, None)
+                        label_field["codeContext"] = {
+                            "name": f"{field_name}-label"
+                        }
+                        self.all_items.append(label_field)
+                        self.Report.report_success(f"{field_name}-label", "text-info", label_elem.text.strip())
+                    
+                    # Extract items from the form resources
+                    items = []
+                    for item in control_elem.findall(".//item", self.namespaces):
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text and value is not None and value.text:
+                            # Create a checkbox for each item
+                            checkbox = self.create_field_object("checkbox", f"{field_name}-{value.text}", None, {}, None)
+                            checkbox["label"] = label.text.strip()
+                            checkbox["codeContext"] = {
+                                "name": f"{field_name}-{value.text}"
+                            }
+                            self.all_items.append(checkbox)
+                            self.Report.report_success(f"{field_name}-{value.text}", "checkbox", label.text.strip())
+                
+                return None
+            
+            # Special handling for radio-with-other fields
+            if field_type == "radio-with-other":
+                # Create the radio field
+                radio_field = self.create_field_object("radio", field_name, field_value, field_attributes, mapping)
+                
+                # Extract items from the form resources
+                items = []
+                itemset = self.root.find(f".//fr:open-select1[@bind='{field_name}-bind']/xf:itemset", self.namespaces)
+                if itemset is not None:
+                    for item in self.form_resources.findall(f".//{field_name}/item", self.namespaces):
+                        label = item.find("label", self.namespaces)
+                        value = item.find("value", self.namespaces)
+                        if label is not None and label.text and value is not None and value.text:
+                            items.append({
+                                "text": label.text.strip(),
+                                "value": value.text.strip(),
+                                "name": value.text.strip()
+                            })
+                
+                # Add the original items plus "Other" option
+                radio_field["listItems"] = items + [{
+                    "text": "Other",
+                    "value": "other",
+                    "name": "Other"
+                }]
+                
+                # Create the text input field for "Other"
+                other_field = self.create_field_object("text-input", f"{field_name}-other", None, {}, None)
+                other_field["label"] = "Other"
+                other_field["placeholder"] = "Please specify"
+                
+                # Add both fields directly to all_items
+                self.all_items.append(radio_field)
+                self.all_items.append(other_field)
+                
+                # Report success for both fields
+                self.Report.report_success(field_name, "radio", radio_field.get("label", ""))
+                self.Report.report_success(f"{field_name}-other", "text-input", other_field.get("label", ""))
+                
+                return None
             
             # Process dropdown or radio options
             if field_type == "dropdown" or field_type == "radio":
@@ -357,34 +489,19 @@ class OrbeonParser:
                     # Convert boolean string to actual value
                     if field_value is not None:
                         field_obj["value"] = field_value.lower() == "true"
+                # Special handling for yesno-input fields
+                elif field_type == "radio" and self.root.find(f".//fr:yesno-input[@bind='{field_name}-bind']", self.namespaces) is not None:
+                    field_obj["listItems"] = [
+                        {"text": "Yes", "value": "true", "name": "Yes"},
+                        {"text": "No", "value": "false", "name": "No"}
+                    ]
+                    # Convert boolean string to actual value
+                    if field_value is not None:
+                        field_obj["value"] = field_value.lower() == "true"
                 else:
                     options = self.extract_dropdown_options(field_elem)
                     if options:
                         field_obj["listItems"] = options
-            
-            # Process checkbox value
-            if field_type == "checkbox":
-                # Check for explicit value in XML
-                value_elem = field_elem.find(".//value", self.namespaces)
-                if value_elem is not None and value_elem.text:
-                    field_obj["value"] = value_elem.text.lower() == "true"
-                else:
-                    # Default to false if no value specified
-                    field_obj["value"] = False
-            
-            # Process date validation
-            if field_type == "date":
-                # Add specific validation rules based on field name
-                if "signed" in field_name.lower():
-                    field_obj["validation"].extend([
-                        {
-                            "type": "maxDate",
-                            "value": datetime.now().strftime("%Y-%m-%d"),
-                            "errorMessage": "Date cannot be in the future"
-                        }
-                    ])
-            
-            self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
                 self.Report.report_success(field_name, field_type, field_obj.get("label", ""))
@@ -400,8 +517,8 @@ class OrbeonParser:
     def determine_field_type(self, field_name, field_value, field_attributes, mapping):
         """Determine the type of field based on its attributes and mapping"""
         try:
-            # Skip grid elements
-            if field_name.startswith("grid-"):
+            # Skip grid elements and section iterations
+            if field_name.startswith("grid-") or field_name.endswith("-iteration"):
                 return None
             
             # Check mapping first
@@ -431,12 +548,48 @@ class OrbeonParser:
             if explanation_elem is not None:
                 return "text-info"
             
+            # Check for currency fields
+            currency_elem = self.root.find(f".//fr:currency[@bind='{field_name}-bind']", self.namespaces)
+            if currency_elem is not None:
+                return "number-input"
+            
+            # Check for number fields
+            number_elem = self.root.find(f".//fr:number[@bind='{field_name}-bind']", self.namespaces)
+            if number_elem is not None:
+                return "number-input"
+            
             # Check if field is a control with text tag
             if field_name.startswith("control-"):
                 # Then check directly in the field element
                 text_elem = self.form_instance.find(f".//{field_name}/text", self.namespaces)
                 if text_elem is not None:
                     return "text-info"
+                
+                # Check for open-select1 elements (radio with other)
+                open_select1_elem = self.root.find(f".//fr:open-select1[@bind='{field_name}-bind']", self.namespaces)
+                if open_select1_elem is not None:
+                    return "radio-with-other"
+                
+                # Check for select elements with appearance="full" (multiple checkboxes)
+                select_elem = self.root.find(f".//xf:select[@bind='{field_name}-bind']", self.namespaces)
+                if select_elem is not None and select_elem.get("appearance") == "full":
+                    return "checkbox-group"
+                
+                # Check if this is a checkbox list by looking at the control element
+                control_elem = self.form_resources.find(f".//{field_name}", self.namespaces)
+                if control_elem is not None:
+                    # Check if it has multiple items
+                    items = control_elem.findall(".//item", self.namespaces)
+                    if items and len(items) > 1:
+                        # Check if there's a corresponding select element with appearance="full"
+                        select_elem = self.root.find(f".//xf:select[@bind='{field_name}-bind']", self.namespaces)
+                        if select_elem is not None and select_elem.get("appearance") == "full":
+                            return "checkbox-group"
+                
+                # Check for dropdown-select1 elements first
+                dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
+                if dropdown_select1_elem is not None:
+                    return "dropdown"
                 
                 # Check if it's a radio button by looking for items with labels and values
                 # First check in the field element itself
@@ -462,10 +615,25 @@ class OrbeonParser:
             # Check if field is bound to an input
             bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
             if bind_elem is not None:
+                # Check for yesno-input elements
+                yesno_elem = self.root.find(f".//fr:yesno-input[@bind='{field_name}-bind']", self.namespaces)
+                if yesno_elem is not None:
+                    return "radio"
+                
+                # Check for button elements
+                button_elem = self.root.find(f".//xf:trigger[@bind='{field_name}-bind']", self.namespaces)
+                if button_elem is not None:
+                    return "button"
+                
                 # Check for checkbox-input elements first
                 checkbox_input_elem = self.root.find(f".//fr:checkbox-input[@bind='{field_name}-bind']", self.namespaces)
                 if checkbox_input_elem is not None:
                     return "checkbox"
+                
+                # Check for dropdown-select1 elements (treat as dropdowns)
+                dropdown_select1_elem = self.root.find(f".//fr:dropdown-select1[@bind='{field_name}-bind']", self.namespaces)
+                if dropdown_select1_elem is not None:
+                    return "dropdown"
                 
                 # Check for select1 elements (dropdowns or radio buttons)
                 select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
@@ -489,11 +657,6 @@ class OrbeonParser:
                 date_elem = self.root.find(f".//fr:date[@bind='{field_name}-bind']", self.namespaces)
                 if date_elem is not None:
                     return "date"
-                
-                # Check for currency elements
-                currency_elem = self.root.find(f".//fr:currency[@bind='{field_name}-bind']", self.namespaces)
-                if currency_elem is not None:
-                    return "currency"
                 
                 # Check for checkbox elements - look for both input and checkbox elements
                 checkbox_elem = self.root.find(f".//xf:input[@bind='{field_name}-bind']", self.namespaces)
@@ -589,6 +752,28 @@ class OrbeonParser:
                     "value": bind_attrs['maxLength'],
                     "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                 })
+        
+        # Extract constraints from bind element
+        bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
+        if bind_elem is not None:
+            for constraint in bind_elem.findall(".//xf:constraint", self.namespaces):
+                constraint_value = constraint.get("value", "")
+                if "xxf:min-length" in constraint_value:
+                    # Extract the number from xxf:min-length(1)
+                    min_length = constraint_value.split("(")[1].split(")")[0]
+                    validation_rules.append({
+                        "type": "minLength",
+                        "value": int(min_length),
+                        "errorMessage": f"Value must be at least {min_length} characters"
+                    })
+                elif "xxf:max-length" in constraint_value:
+                    # Extract the number from xxf:max-length(3)
+                    max_length = constraint_value.split("(")[1].split(")")[0]
+                    validation_rules.append({
+                        "type": "maxLength",
+                        "value": int(max_length),
+                        "errorMessage": f"Value must be at most {max_length} characters"
+                    })
         
         # Get label and hint from form resources
         label = self.get_field_label(field_name)
@@ -784,6 +969,35 @@ class OrbeonParser:
                 field_obj["filename"] = field_attributes.get('filename')
             if field_attributes.get('size'):
                 field_obj["size"] = field_attributes.get('size')
+        elif field_type == "button":
+            field_obj = {
+                "type": "button",
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "buttonType": "submit",
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
+        elif field_type == "number":
+            field_obj = {
+                "type": "number-input",
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "mask": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "placeholder": None,
+                "validation": validation_rules
+            }
+            if field_value:
+                field_obj["value"] = field_value
         
         # Apply any additional mappings
         if mapping:
@@ -868,7 +1082,18 @@ class OrbeonParser:
             # Find the field's resource section
             field_resource = self.form_resources.find(f".//{field_name}", self.namespaces)
             if field_resource is not None:
-                # Look for label element
+                # First check for text element
+                text_elem = field_resource.find("text", self.namespaces)
+                if text_elem is not None and text_elem.text:
+                    # If text contains HTML, extract text content
+                    if "<div>" in text_elem.text:
+                        # Remove HTML tags and get text content
+                        import re
+                        text = re.sub('<[^<]+?>', '', text_elem.text)
+                        return text.strip()
+                    return text_elem.text.strip()
+                
+                # Then check for label element
                 label_elem = field_resource.find("label", self.namespaces)
                 if label_elem is not None and label_elem.text:
                     # If label contains HTML, extract text content
