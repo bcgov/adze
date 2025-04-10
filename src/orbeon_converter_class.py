@@ -255,19 +255,24 @@ class OrbeonParser:
                 else:
                     self.all_items.append(section_obj)
             
-            # If this is a repeater, process the template instance first
+            # If this is a repeater, process the template instance only
             if is_repeater and template_instance is not None and section_obj is not None:
+                # Clear the fields array before adding new fields
+                section_obj["groupItems"][0]["fields"] = []
+                
+                # Process fields directly from the template instance
                 template_section = template_instance.find(f".//{section_name}-iteration", self.namespaces)
                 if template_section is not None:
-                    for grid in template_section:
-                        if grid.tag.startswith("grid-"):
-                            for field_elem in grid:
-                                field_obj = self.process_field(field_elem)
-                                if field_obj:
-                                    section_obj["groupItems"][0]["fields"].append(field_obj)
-            
-            # Process each grid in the section
-            if section_obj is not None:
+                    # Process all fields in the template section
+                    for field_elem in template_section:
+                        field_obj = self.process_field(field_elem)
+                        if field_obj:
+                            if isinstance(field_obj, list):
+                                section_obj["groupItems"][0]["fields"].extend(field_obj)
+                            else:
+                                section_obj["groupItems"][0]["fields"].append(field_obj)
+            # For non-repeater sections, process fields directly
+            elif not is_repeater:
                 for grid in section:
                     grid_name = grid.tag
                     
@@ -276,45 +281,15 @@ class OrbeonParser:
                         field_obj = self.process_field(grid)
                         if field_obj:
                             if isinstance(field_obj, list):
-                                section_obj["groupItems"][0]["fields"].extend(field_obj)
-                            else:
-                                section_obj["groupItems"][0]["fields"].append(field_obj)
-                        continue
-                    
-                    self.add_breadcrumb(grid_name)
-                    
-                    # Handle grid iterations differently (they can contain repeating fields)
-                    iteration_tag = f"{grid_name}-iteration"
-                    iterations = grid.findall(f"./{iteration_tag}", self.namespaces)
-                    
-                    if iterations:
-                        # This is a repeating grid
-                        for iteration in iterations:
-                            self.process_grid_iteration(iteration, section_obj)
-                    else:
-                        # Regular grid with fields
-                        for field_elem in grid:
-                            field_obj = self.process_field(field_elem)
-                            if field_obj:
-                                if isinstance(field_obj, list):
-                                    section_obj["groupItems"][0]["fields"].extend(field_obj)
+                                if parent_section:
+                                    parent_section["groupItems"][0]["fields"].extend(field_obj)
                                 else:
-                                    section_obj["groupItems"][0]["fields"].append(field_obj)
-                    
-                    self.remove_breadcrumb(grid_name)
-            else:
-                # For non-repeater sections, process fields directly
-                for grid in section:
-                    grid_name = grid.tag
-                    
-                    # Skip processing if this is not a grid element
-                    if not grid_name.startswith("grid-"):
-                        field_obj = self.process_field(grid)
-                        if field_obj:
-                            if parent_section:
-                                parent_section["groupItems"][0]["fields"].append(field_obj)
+                                    self.all_items.extend(field_obj)
                             else:
-                                self.all_items.append(field_obj)
+                                if parent_section:
+                                    parent_section["groupItems"][0]["fields"].append(field_obj)
+                                else:
+                                    self.all_items.append(field_obj)
                         continue
                     
                     self.add_breadcrumb(grid_name)
@@ -332,10 +307,16 @@ class OrbeonParser:
                         for field_elem in grid:
                             field_obj = self.process_field(field_elem)
                             if field_obj:
-                                if parent_section:
-                                    parent_section["groupItems"][0]["fields"].append(field_obj)
+                                if isinstance(field_obj, list):
+                                    if parent_section:
+                                        parent_section["groupItems"][0]["fields"].extend(field_obj)
+                                    else:
+                                        self.all_items.extend(field_obj)
                                 else:
-                                    self.all_items.append(field_obj)
+                                    if parent_section:
+                                        parent_section["groupItems"][0]["fields"].append(field_obj)
+                                    else:
+                                        self.all_items.append(field_obj)
                     
                     self.remove_breadcrumb(grid_name)
             
