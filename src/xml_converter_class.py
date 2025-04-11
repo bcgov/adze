@@ -553,10 +553,35 @@ class XDPParser:
             
             # Create field object based on type
             if field_type == "text-input":
+                # Try multiple sources for label content
+                label_text = None
+                
+                # 1. Check exData content
+                exdata_elem = draw.find(".//template:exData", self.namespaces)
+                if exdata_elem is not None:
+                    label_text = self.extract_text_from_exdata(exdata_elem)
+                
+                # 2. If no exData, check direct text elements
+                if not label_text:
+                    text_elem = draw.find(".//template:text", self.namespaces)
+                    if text_elem is not None and text_elem.text:
+                        label_text = text_elem.text.strip()
+                
+                # 3. If still no label, check caption elements
+                if not label_text:
+                    caption_elem = draw.find(".//template:caption//template:text", self.namespaces)
+                    if caption_elem is not None and caption_elem.text:
+                        label_text = caption_elem.text.strip()
+                
+                # 4. If still no label, try to create one from the field name
+                if not label_text:
+                    field_name = draw_name.replace("Text", "Field ").replace("_", " ")
+                    label_text = field_name.strip()
+                
                 field_obj = {
                     "type": "text-input",
                     "id": self.next_id(),
-                    "label": text_value,  # Set text value as label
+                    "label": label_text,
                     "styles": None,
                     "mask": None,
                     "codeContext": {
