@@ -4,7 +4,7 @@ import subprocess
 import glob
 import traceback
 import sys
-
+from src.filename_generator import generate_filename
 app = Flask(__name__)
 
 INPUT_DIR = os.getenv("INPUT_DIR", "data/input")
@@ -56,10 +56,9 @@ def upload():
         try:
             # Process both XDP and XML files using xdp_converter_cli.py
             base_name = os.path.splitext(filename)[0]
-            output_file = os.path.join(OUTPUT_DIR, f"{base_name}_output.json")
             input_file = os.path.join(INPUT_DIR, filename)
             mapping_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xml_mapping.json")
-            
+            output_file = generate_filename(input_file, "output")
             # Print debug information
             print(f"Processing file: {filename}")
             print(f"Input file path: {input_file}")
