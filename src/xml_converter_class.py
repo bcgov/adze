@@ -453,7 +453,7 @@ class XDPParser:
                     self.all_items.append(group)
             
             # Process exclusion groups (radio button groups)
-            for exclgroup in self.root_subform.findall("./template:exclGroup", self.namespaces):
+            for exclgroup in self.root_subform.findall(".//template:exclGroup", self.namespaces):
                 group = self.process_exclgroup(exclgroup)
                 if group:
                     self.all_items.append(group)
@@ -884,10 +884,13 @@ class XDPParser:
                 field_obj["listItems"] = list_items
             
             elif ui_tag == "checkButton":
+                # Check if this is a round checkButton (radio button)
+                is_radio = ui_child.attrib.get("shape", "") == "round"
+                
                 field_obj = {
-                    "type": "checkbox",
+                    "type": "radio" if is_radio else "checkbox",
                     "id": self.next_id(),
-                    "label": label if label else "Checkbox",
+                    "label": label if label else "Radio" if is_radio else "Checkbox",
                     "webStyles": None,
                     "pdfStyles": None,
                     "mask": None,
@@ -898,7 +901,7 @@ class XDPParser:
                     "conditions": []
                 }
 
-                # Extract checkbox default value (1 = checked, 0 = unchecked)
+                # Extract checkbox/radio default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
                 if value_elem is not None:
                     field_obj["value"] = value_elem.text.strip() == "1"
@@ -1240,33 +1243,50 @@ class XDPParser:
             """Process an exclusion group (radio button group)"""
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
             
+            # Add logging for exclusion group processing
+            print(f"\nProcessing exclusion group '{group_name}'")
+            print(f"Location in XML: {self.breadcrumb}")
+            
             # Process any scripts and get conditions
             conditions = []
             script_result = self.process_script(exclgroup)
             if script_result:
-                if script_result["type"] == "visibility":
-                    conditions.append(script_result)
-                elif script_result["type"] == "calculatedValue":
-                    calculated_value = script_result["value"]
-                elif script_result["type"] == "javascript":
-                    if "validation" not in field_obj:
-                        field_obj["validation"] = []
-                    field_obj["validation"].append(script_result)
+                conditions.append(script_result)
             
-            # Process fields (usually radio buttons) in this group
+            # Create base radio object
+            radio_obj = {
+                "type": "radio",
+                "id": self.next_id(),
+                "label": None,
+                "styles": None,
+                "codeContext": {
+                    "name": group_name
+                },
+                "listItems": [],
+                "direction": "vertical",
+                "validation": [],
+                "value": False
+            }
+            
+            # Process fields to create list items
             for field in exclgroup.findall("./template:field", self.namespaces):
-                radio_obj = self.process_field(field)
-                if radio_obj:
-                    # Make sure it's a radio button and set the group name
-                    if radio_obj["type"] == "radio":
-                        radio_obj["groupName"] = group_name
-                        # Add conditions to each radio button
-                        if conditions:
-                            radio_obj["conditions"] = conditions
-                        self.all_items.append(radio_obj)
-                        self.Report.report_success(group_name, 'radio', "Radio Button")
+                caption = field.find(".//template:caption//template:text", self.namespaces)
+                text_value = caption.text if caption is not None and caption.text else field.attrib.get("name", "Option")
+                
+                radio_obj["listItems"].append({
+                    "text": text_value,
+                    "value": text_value,
+                    "name": text_value
+                })
             
-            return None  # No longer returning a group object
+            # Add conditions if any
+            if conditions:
+                radio_obj["conditions"] = conditions
+            
+            self.all_items.append(radio_obj)
+            self.Report.report_success(group_name, 'radio', "Radio Button Group")
+            
+            return None
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
             self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
