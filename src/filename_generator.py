@@ -1,6 +1,7 @@
 import datetime
 import os
 from pathlib import PurePosixPath
+import re
 
 # Resolve paths based on the script's actual location
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))  # Get project root
@@ -22,9 +23,9 @@ def generate_filename(xml_filename, file_type):
         str: Full path to the generated file.
     """
     # Get filename without extension and extension separately
-    base_name = os.path.splitext(os.path.basename(xml_filename))[0]  # Remove extension
-    input_ext = os.path.splitext(os.path.basename(xml_filename))[1].lower().replace('.', '')  # Get extension without dot
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # YYYYMMDD_HHMMSS
+    base_name = os.path.splitext(os.path.basename(xml_filename))[0]
+    input_ext = os.path.splitext(xml_filename)[1].lower().replace('.', '')
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if file_type == "report":
         directory = REPORT_DIR
@@ -33,5 +34,6 @@ def generate_filename(xml_filename, file_type):
     else:
         raise ValueError("Invalid file type. Must be 'report' or 'output'.")
 
-    os.makedirs(directory, exist_ok=True)  # Ensure directory exists
+    os.makedirs(directory, exist_ok=True)
+
     return str(PurePosixPath(directory, f"{base_name}_{input_ext}_{file_type}_{timestamp}.json"))
