@@ -429,32 +429,31 @@ class XDPParser:
     def process_root_elements(self):
         try:
             """Process top-level elements in the main subform"""
-            # First, check for any direct field or draw elements
-            for draw in self.root_subform.findall(".//template:draw", self.namespaces):
-                field = self.process_draw(draw)
-                if field:
-                    self.all_items.append(field)
-            
-            for field in self.root_subform.findall("./template:field", self.namespaces):
-                field_obj = self.process_field(field)
-                if field_obj:
-                    field_script = self.process_script(field)
-                    if field_script:
-                        if "validation" in field_obj:
-                            field_obj["validation"].append(field_script)
-                        else:
-                            field_obj["validation"] = [field_script]
-                    self.all_items.append(field_obj)
-            
-            # Then process subforms (which become groups)
-            for subform in self.root_subform.findall("./template:subform", self.namespaces):
+            # Process all subforms to maintain document order
+            for subform in self.root_subform.findall(".//template:subform", self.namespaces):
+                # Process draws and exclGroups in this subform
+                for child in subform:
+                    if 'draw' in child.tag:
+                        field = self.process_draw(child)
+                        if field:
+                            self.all_items.append(field)
+                    elif 'exclGroup' in child.tag:
+                        group = self.process_exclgroup(child)
+                        if group:
+                            self.all_items.append(group)
+                    elif 'field' in child.tag:
+                        field_obj = self.process_field(child)
+                        if field_obj:
+                            field_script = self.process_script(child)
+                            if field_script:
+                                if "validation" in field_obj:
+                                    field_obj["validation"].append(field_script)
+                                else:
+                                    field_obj["validation"] = [field_script]
+                            self.all_items.append(field_obj)
+                    
+                # Process any nested subforms
                 group = self.process_subform(subform)
-                if group:
-                    self.all_items.append(group)
-            
-            # Process exclusion groups (radio button groups)
-            for exclgroup in self.root_subform.findall(".//template:exclGroup", self.namespaces):
-                group = self.process_exclgroup(exclgroup)
                 if group:
                     self.all_items.append(group)
         except Exception as e:
