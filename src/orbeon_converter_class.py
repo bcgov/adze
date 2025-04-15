@@ -774,7 +774,22 @@ class OrbeonParser:
                         "value": int(max_length),
                         "errorMessage": f"Value must be at most {max_length} characters"
                     })
-        
+                else:
+                    # Add any other constraints as formula validations
+                    validation_rules.append({
+                        "type": "formula",
+                        "value": constraint_value,
+                        "errorMessage": "Invalid value"
+                    })
+                    
+        # Also check for required attribute in the bind element directly
+        bind_elem = self.root.find(f".//xf:bind[@ref='{field_name}']", self.namespaces)
+        if bind_elem is not None and bind_elem.attrib.get("required") == "true()":
+            validation_rules.append({
+                "type": "required",
+                "value": True,
+                "errorMessage": "This field is required"
+            })
         # Get label and hint from form resources
         label = self.get_field_label(field_name)
         hint = self.get_field_hint(field_name)
