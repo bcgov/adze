@@ -1018,6 +1018,10 @@ class OrbeonParser:
             if mapping.get("helpText"):
                 field_obj["helpText"] = mapping.get("helpText")
         
+        # Remove validation field if validation array is empty
+        if "validation" in field_obj and not field_obj["validation"]:
+            del field_obj["validation"]
+        
         return field_obj
     
     def format_section_name(self, section_name):
