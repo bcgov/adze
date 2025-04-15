@@ -3,6 +3,8 @@ import json
 import os
 import uuid
 from datetime import datetime
+
+from bs4 import BeautifulSoup
 from src.report import Report
 
 class XDPParser:
@@ -630,11 +632,30 @@ class XDPParser:
         """Extract label from field using multiple methods"""
         try:
             label = None
-            
+             # ✅ Method 0: Check for rich HTML caption (exData inside caption/value)
+            caption_elem = field.find(".//template:caption", self.namespaces)
+            if caption_elem is not None:
+                for val in caption_elem.findall(".//template:value", self.namespaces):
+                    exdata = val.find(".//template:exData", self.namespaces)
+                    if exdata is not None:
+                        # 🛠️ Even if exdata.text is None, extract the inner XML
+                        html_content = ET.tostring(exdata, encoding="unicode", method="xml")
+                        soup = BeautifulSoup(html_content, "html.parser")
+
+                        for tag_name in ["p", "div", "span"]:
+                            tag_elem = soup.find(tag_name)
+                            if tag_elem and tag_elem.get_text(strip=True):
+                                label = tag_elem.get_text(strip=True)
+                                break
+
+                        if not label:
+                            label = soup.get_text(strip=True)
+                        break
             # Method 1: Direct caption
-            caption_elem = field.find(".//template:caption//template:text", self.namespaces)
-            if caption_elem is not None and caption_elem.text:
-                label = caption_elem.text.strip()
+            if not label:
+                caption_elem = field.find(".//template:caption//template:text", self.namespaces)
+                if caption_elem is not None and caption_elem.text:
+                    label = caption_elem.text.strip()
             
             # Method 2: Value text that looks like a label
             if not label:
