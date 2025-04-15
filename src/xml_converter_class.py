@@ -631,12 +631,21 @@ class XDPParser:
         try:
             label = None
             
-            # Method 1: Direct caption
-            caption_elem = field.find(".//template:caption//template:text", self.namespaces)
-            if caption_elem is not None and caption_elem.text:
-                label = caption_elem.text.strip()
+            # Method 1: Check exData in caption first
+            caption_elem = field.find(".//template:caption", self.namespaces)
+            if caption_elem is not None:
+                # Check for exData in caption
+                exdata_elem = caption_elem.find(".//template:exData", self.namespaces)
+                if exdata_elem is not None and exdata_elem.attrib.get("contentType") == "text/html":
+                    label = self.extract_text_from_exdata(exdata_elem)
             
-            # Method 2: Value text that looks like a label
+            # Method 2: Direct caption text if no exData found
+            if not label:
+                caption_text = caption_elem.find(".//template:text", self.namespaces)
+                if caption_text is not None and caption_text.text:
+                    label = caption_text.text.strip()
+            
+            # Method 3: Value text that looks like a label
             if not label:
                 value_elem = field.find(".//template:value//template:text", self.namespaces)
                 if value_elem is not None and value_elem.text:
@@ -645,7 +654,7 @@ class XDPParser:
                     if text.endswith(':') or text.isupper() or len(text.split()) <= 4:
                         label = text
             
-            # Method 3: Field name converted to label
+            # Method 4: Field name converted to label
             if not label:
                 field_name = field.attrib.get("name", "")
                 if field_name:
@@ -1241,11 +1250,7 @@ class XDPParser:
         try:
             """Process an exclusion group (radio button group)"""
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
-            
-            # Add logging for exclusion group processing
-            print(f"\nProcessing exclusion group '{group_name}'")
-            print(f"Location in XML: {self.breadcrumb}")
-            
+                        
             # Process any scripts and get conditions
             conditions = []
             script_result = self.process_script(exclgroup)
