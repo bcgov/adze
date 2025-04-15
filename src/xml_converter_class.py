@@ -862,34 +862,16 @@ class XDPParser:
                 }
                 
                 # Extract items directly with their attributes using ElementTree's API
-                visible_items = []
-                saved_values = []
-                
-                # Get all items elements first
                 items_elements = field.findall("./template:items", self.namespaces)
                 for items_elem in items_elements:
-                    is_hidden = items_elem.get("presence") == "hidden"
-                    is_saved = items_elem.get("save") == "1"
-                    
                     # Get text elements within this items element
                     for text_elem in items_elem.findall("./template:text", self.namespaces):
-                        if is_saved:
-                            saved_values.append(text_elem)
-                        elif not is_hidden:
-                            visible_items.append(text_elem)
-
-                # Ensure correct mapping of labels and values
-                list_items = []
-                for index, item in enumerate(visible_items):
-                    value = saved_values[index].text if index < len(saved_values) else item.text
-                    if item.text:
-                        list_items.append({
-                            "text": item.text.strip(),
-                            "value": value.strip(),
-                            "name": value.strip()
-                        })
-
-                field_obj["listItems"] = list_items
+                        if text_elem.text:
+                            field_obj["listItems"].append({
+                                "text": text_elem.text.strip(),
+                                "value": text_elem.text.strip(),
+                                "name": text_elem.text.strip()
+                            })
             
             elif ui_tag == "checkButton":
                 # Check if this is a round checkButton (radio button)
