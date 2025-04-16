@@ -431,33 +431,31 @@ class XDPParser:
     def process_root_elements(self):
         try:
             """Process top-level elements in the main subform"""
-            # Process all subforms to maintain document order
-            for subform in self.root_subform.findall(".//template:subform", self.namespaces):
-                # Process draws and exclGroups in this subform
-                for child in subform:
-                    if 'draw' in child.tag:
-                        field = self.process_draw(child)
-                        if field:
-                            self.all_items.append(field)
-                    elif 'exclGroup' in child.tag:
-                        group = self.process_exclgroup(child)
-                        if group:
-                            self.all_items.append(group)
-                    elif 'field' in child.tag:
-                        field_obj = self.process_field(child)
-                        if field_obj:
-                            field_script = self.process_script(child)
-                            if field_script:
-                                if "validation" in field_obj:
-                                    field_obj["validation"].append(field_script)
-                                else:
-                                    field_obj["validation"] = [field_script]
-                            self.all_items.append(field_obj)
-                    
-                # Process any nested subforms
-                group = self.process_subform(subform)
-                if group:
-                    self.all_items.append(group)
+            # Only process direct children of root_subform, not all subforms
+            for child in self.root_subform:
+                if 'draw' in child.tag:
+                    field = self.process_draw(child)
+                    if field:
+                        self.all_items.append(field)
+                elif 'exclGroup' in child.tag:
+                    print(f"Processing exclGroup: {child.attrib.get('name', 'unnamed')} at path: {self.get_breadcrumb()}")
+                    group = self.process_exclgroup(child)
+                    if group:
+                        self.all_items.append(group)
+                elif 'field' in child.tag:
+                    field_obj = self.process_field(child)
+                    if field_obj:
+                        field_script = self.process_script(child)
+                        if field_script:
+                            if "validation" in field_obj:
+                                field_obj["validation"].append(field_script)
+                            else:
+                                field_obj["validation"] = [field_script]
+                        self.all_items.append(field_obj)
+                elif 'subform' in child.tag:
+                    group = self.process_subform(child)
+                    if group:
+                        self.all_items.append(group)
         except Exception as e:
             print(f"Error processing root elements: {e}")
     
@@ -1160,79 +1158,80 @@ class XDPParser:
                     ]
                 }
                 
-                # Process direct child fields in this subform (not descendants)
-                for field in subform.findall("./template:field", self.namespaces):
-                    field_obj = self.process_field(field)
-                    if field_obj:
-                        # Add conditions to each field
-                        if conditions:
-                            field_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for field identification
-                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                        group_obj["groupItems"][0]["fields"].append(field_obj)
+                # Process direct children in order
+                for child in subform:
+                    if 'field' in child.tag:
+                        field_obj = self.process_field(child)
+                        if field_obj:
+                            if conditions:
+                                field_obj["conditions"].extend(conditions)
+                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                            group_obj["groupItems"][0]["fields"].append(field_obj)
+                    elif 'exclGroup' in child.tag:
+                        print(f"Processing nested exclGroup: {child.attrib.get('name', 'unnamed')} in subform: {subform_name}")
+                        group = self.process_exclgroup(child)
+                        if group:
+                            if conditions:
+                                if "conditions" not in group:
+                                    group["conditions"] = []
+                                group["conditions"].extend(conditions)
+                            group_obj["groupItems"][0]["fields"].append(group)
+                    elif 'draw' in child.tag:
+                        draw_obj = self.process_draw(child)
+                        if draw_obj:
+                            if conditions:
+                                if "conditions" not in draw_obj:
+                                    draw_obj["conditions"] = []
+                                draw_obj["conditions"].extend(conditions)
+                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                            group_obj["groupItems"][0]["fields"].append(draw_obj)
+                    elif 'subform' in child.tag:
+                        nested_group = self.process_subform(child)
+                        if nested_group:
+                            if conditions:
+                                if "conditions" not in nested_group:
+                                    nested_group["conditions"] = []
+                                nested_group["conditions"].extend(conditions)
+                            group_obj["groupItems"][0]["fields"].append(nested_group)
 
-                # Process direct child draw elements (not descendants)
-                for draw in subform.findall("./template:draw", self.namespaces):
-                    draw_obj = self.process_draw(draw)
-                    if draw_obj:
-                        # Add conditions to each draw element
-                        if conditions:
-                            if "conditions" not in draw_obj:
-                                draw_obj["conditions"] = []
-                            draw_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for draw identification
-                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                        group_obj["groupItems"][0]["fields"].append(draw_obj)
-
-                # Process direct child subforms (not descendants)
-                for nested_subform in subform.findall("./template:subform", self.namespaces):
-                    nested_group = self.process_subform(nested_subform)
-                    if nested_group:
-                        # Add conditions to nested group if they exist
-                        if conditions:
-                            if "conditions" not in nested_group:
-                                nested_group["conditions"] = []
-                            nested_group["conditions"].extend(conditions)
-                        group_obj["groupItems"][0]["fields"].append(nested_group)
-
-                # Add the group to all_items and return it
                 self.all_items.append(group_obj)
                 return group_obj
             else:
                 # Process non-repeating subform fields directly
-                for field in subform.findall("./template:field", self.namespaces):
-                    field_obj = self.process_field(field)
-                    if field_obj:
-                        # Add conditions to each field
-                        if conditions:
-                            field_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for field identification
-                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                        self.all_items.append(field_obj)
-
-                # Process direct child draw elements (not descendants)
-                for draw in subform.findall("./template:draw", self.namespaces):
-                    draw_obj = self.process_draw(draw)
-                    if draw_obj:
-                        # Add conditions to each draw element
-                        if conditions:
-                            if "conditions" not in draw_obj:
-                                draw_obj["conditions"] = []
-                            draw_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for draw identification
-                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                        self.all_items.append(draw_obj)
-
-                # Process direct child subforms (not descendants)
-                for nested_subform in subform.findall("./template:subform", self.namespaces):
-                    nested_group = self.process_subform(nested_subform)
-                    if nested_group:
-                        # Add conditions to nested group if they exist
-                        if conditions:
-                            if "conditions" not in nested_group:
-                                nested_group["conditions"] = []
-                            nested_group["conditions"].extend(conditions)
-                        self.all_items.append(nested_group)
+                for child in subform:
+                    if 'field' in child.tag:
+                        field_obj = self.process_field(child)
+                        if field_obj:
+                            if conditions:
+                                field_obj["conditions"].extend(conditions)
+                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                            self.all_items.append(field_obj)
+                    elif 'exclGroup' in child.tag:
+                        print(f"Processing nested exclGroup: {child.attrib.get('name', 'unnamed')} in subform: {subform_name}")
+                        group = self.process_exclgroup(child)
+                        if group:
+                            if conditions:
+                                if "conditions" not in group:
+                                    group["conditions"] = []
+                                group["conditions"].extend(conditions)
+                            self.all_items.append(group)
+                    elif 'draw' in child.tag:
+                        draw_obj = self.process_draw(child)
+                        if draw_obj:
+                            if conditions:
+                                if "conditions" not in draw_obj:
+                                    draw_obj["conditions"] = []
+                                draw_obj["conditions"].extend(conditions)
+                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                            self.all_items.append(draw_obj)
+                    elif 'subform' in child.tag:
+                        nested_group = self.process_subform(child)
+                        if nested_group:
+                            if conditions:
+                                if "conditions" not in nested_group:
+                                    nested_group["conditions"] = []
+                                nested_group["conditions"].extend(conditions)
+                            self.all_items.append(nested_group)
 
                 return None
 
