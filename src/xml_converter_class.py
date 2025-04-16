@@ -438,7 +438,7 @@ class XDPParser:
                     if field:
                         self.all_items.append(field)
                 elif 'exclGroup' in child.tag:
-                    print(f"Processing exclGroup: {child.attrib.get('name', 'unnamed')} at path: {self.get_breadcrumb()}")
+                    
                     group = self.process_exclgroup(child)
                     if group:
                         self.all_items.append(group)
@@ -1175,7 +1175,7 @@ class XDPParser:
                             field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
                             group_obj["groupItems"][0]["fields"].append(field_obj)
                     elif 'exclGroup' in child.tag:
-                        print(f"Processing nested exclGroup: {child.attrib.get('name', 'unnamed')} in subform: {subform_name}")
+                        
                         group = self.process_exclgroup(child)
                         if group:
                             if conditions:
@@ -1214,7 +1214,6 @@ class XDPParser:
                             field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
                             self.all_items.append(field_obj)
                     elif 'exclGroup' in child.tag:
-                        print(f"Processing nested exclGroup: {child.attrib.get('name', 'unnamed')} in subform: {subform_name}")
                         group = self.process_exclgroup(child)
                         if group:
                             if conditions:
