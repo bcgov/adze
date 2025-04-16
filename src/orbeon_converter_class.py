@@ -528,6 +528,11 @@ class OrbeonParser:
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
             
+            # Check for select1 elements with appearance="dropdown" first
+            select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
+            if select1_elem is not None and select1_elem.get("appearance") == "dropdown":
+                return "dropdown"
+            
             # Check for file upload fields
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
                 return "file"
