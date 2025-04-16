@@ -891,15 +891,29 @@ class XDPParser:
                     "type": "radio" if is_radio else "checkbox",
                     "id": self.next_id(),
                     "label": label if label else "Radio" if is_radio else "Checkbox",
-                    "webStyles": None,
+                    "styles": None,
                     "pdfStyles": None,
                     "mask": None,
                     "codeContext": {
                         "name": field_name
                     },
+                    "listItems": [],
                     "databindings": {},
+                    "direction": "vertical",
+                    "value": False,
                     "conditions": []
                 }
+                # Extract items directly with their attributes using ElementTree's API
+                items_elements = field.findall("./template:items", self.namespaces)
+                for items_elem in items_elements:
+                    # Get integer elements within this items element
+                    for integer_elem in items_elem.findall("./template:integer", self.namespaces):
+                        if integer_elem.text:
+                            field_obj["listItems"].append({
+                                "text": str(integer_elem.text.strip()),
+                                "value": str(integer_elem.text.strip()),
+                                "name": str(integer_elem.text.strip())
+                            })
 
                 # Extract checkbox/radio default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
@@ -1270,6 +1284,7 @@ class XDPParser:
                 "validation": [],
                 "value": False
             }
+            
             
             # Process fields to create list items
             for field in exclgroup.findall("./template:field", self.namespaces):
