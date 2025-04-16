@@ -1121,13 +1121,20 @@ class XDPParser:
         except Exception as e:
             print(f"Error processing global scripts: {e}")
 
-    def process_subform(self, subform):
+    def process_subform(self, subform, parent_occur=None):
         try:
             """Process a subform element"""
             subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
             
             # Check if this is a repeating group (has occur element)
-            occur_elem = subform.find("./template:occur", self.namespaces)
+            occur_elem = parent_occur
+            for child in subform:
+                if 'occur' in child.tag:
+                    occur_elem = child
+                    break
+            # Check if this is the sbf_ParentInfo_rep subform
+            if subform_name == "sbf_ParentInfo_rep":
+                print("Found sbf_ParentInfo_rep subform")
             is_repeating = occur_elem is not None
             
             # Process any scripts and get conditions
@@ -1186,7 +1193,7 @@ class XDPParser:
                             draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
                             group_obj["groupItems"][0]["fields"].append(draw_obj)
                     elif 'subform' in child.tag:
-                        nested_group = self.process_subform(child)
+                        nested_group = self.process_subform(child, True)
                         if nested_group:
                             if conditions:
                                 if "conditions" not in nested_group:
