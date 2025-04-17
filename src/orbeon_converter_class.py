@@ -824,7 +824,7 @@ class OrbeonParser:
             
             # Fallback to bind info or formatted field name if no label found
             if not label:
-                label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
+                label = None
                 logger.debug(f"Using fallback label for {field_name}: {label}")
             
             # Create field object based on type
