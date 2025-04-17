@@ -783,6 +783,21 @@ class OrbeonParser:
                             "value": int(max_length),
                             "errorMessage": f"Value must be at most {max_length} characters"
                         })
+                    elif not any(x in constraint_value for x in ["xxf:min-length", "xxf:max-length"]):
+                        # Add any other constraint as formula type
+                        validation_rules.append({
+                            "type": "formula", 
+                            "value": constraint_value,
+                            "errorMessage": constraint.get("xxf:validation-message", "Invalid value")
+                        })
+
+                # Check if field is required
+                if bind_elem is not None and bind_elem.get('required') == 'true()':
+                    validation_rules.append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                    })
             
             # Get label and hint from form resources
             label = self.get_field_label(field_name)
