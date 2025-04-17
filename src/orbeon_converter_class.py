@@ -2,8 +2,13 @@ import xml.etree.ElementTree as ET
 import json
 import os
 import uuid
+import logging
 from datetime import datetime
 from src.report import Report
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class OrbeonParser:
     def __init__(self, xml_filename, mapping_file=None):
@@ -156,9 +161,7 @@ class OrbeonParser:
     def create_output_structure(self):
         try:
             """Create the base output JSON structure"""
-
             form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
-
             
             return {
                 "version": None,
@@ -172,7 +175,7 @@ class OrbeonParser:
             }
         except Exception as e:
             print(f"Error creating output structure: {e}")
-                        # In case of error, try to get form_id from filename, otherwise use default
+            # In case of error, try to get form_id from filename, otherwise use default
             try:
                 form_id = os.path.splitext(os.path.basename(self.xml_filename))[0]
             except:
@@ -466,17 +469,22 @@ class OrbeonParser:
                 # Create the text input field for "Other"
                 other_field = self.create_field_object("text-input", f"{field_name}-other", None, {}, None)
                 other_field["label"] = "Other"
-                other_field["placeholder"] = "Please specify"
+                other_field["placeholder"] = None
+                other_field["codeContext"] = {
+                    "name": f"{field_name}-other"
+                }
                 
-                # Add both fields directly to all_items
-                self.all_items.append(radio_field)
-                self.all_items.append(other_field)
+                # Set up the radio field's code context
+                radio_field["codeContext"] = {
+                    "name": field_name
+                }
                 
                 # Report success for both fields
                 self.Report.report_success(field_name, "radio", radio_field.get("label", ""))
                 self.Report.report_success(f"{field_name}-other", "text-input", other_field.get("label", ""))
                 
-                return None
+                # Return both fields as a list
+                return [radio_field, other_field]
             
             # Process dropdown or radio options
             if field_type == "dropdown" or field_type == "radio":
@@ -524,6 +532,11 @@ class OrbeonParser:
             # Check mapping first
             if mapping and mapping.get("fieldType"):
                 return mapping.get("fieldType")
+            
+            # Check for select1 elements with appearance="dropdown" first
+            select1_elem = self.root.find(f".//xf:select1[@bind='{field_name}-bind']", self.namespaces)
+            if select1_elem is not None and select1_elem.get("appearance") == "dropdown":
+                return "dropdown"
             
             # Check for file upload fields
             if field_attributes.get('filename') or field_attributes.get('mediatype'):
@@ -699,326 +712,321 @@ class OrbeonParser:
     
     def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
         """Create field object based on field type"""
-        field_obj = None
-        
-        # Get bind information for validation and label
-        bind_info = self.get_bind_info(field_name)
-        validation_rules = []
-        
-        # Extract validation rules from bind info
-        if bind_info and 'attributes' in bind_info:
-            bind_attrs = bind_info['attributes']
+        try:
+            logger.debug(f"Creating field object for {field_name} with type {field_type}")
+            logger.debug(f"Field value: {field_value}, Attributes: {field_attributes}, Mapping: {mapping}")
             
-            # Handle required validation from XML bind attributes
-            if bind_attrs.get('required') == 'true()' or bind_attrs.get('required') == 'true':
-                validation_rules.append({
-                    "type": "required",
-                    "value": True,
-                    "errorMessage": bind_attrs.get('xxf:required-message', "This field is required")
-                })
+            field_obj = None
             
-            # Handle pattern validation
-            if 'pattern' in bind_attrs:
-                validation_rules.append({
-                    "type": "pattern",
-                    "value": bind_attrs['pattern'],
-                    "errorMessage": bind_attrs.get('xxf:pattern-message', "Invalid format")
-                })
+            # Get bind information for validation and label
+            bind_info = self.get_bind_info(field_name)
+            logger.debug(f"Bind info for {field_name}: {bind_info}")
             
-            # Handle min/max validation
-            if 'min' in bind_attrs:
-                validation_rules.append({
-                    "type": "min",
-                    "value": bind_attrs['min'],
-                    "errorMessage": bind_attrs.get('xxf:min-message', f"Value must be at least {bind_attrs['min']}")
-                })
-            if 'max' in bind_attrs:
-                validation_rules.append({
-                    "type": "max",
-                    "value": bind_attrs['max'],
-                    "errorMessage": bind_attrs.get('xxf:max-message', f"Value must be at most {bind_attrs['max']}")
-                })
+            validation_rules = []
             
-            # Handle minLength/maxLength validation
-            if 'minLength' in bind_attrs:
-                validation_rules.append({
-                    "type": "minLength",
-                    "value": bind_attrs['minLength'],
-                    "errorMessage": bind_attrs.get('xxf:minLength-message', f"Value must be at least {bind_attrs['minLength']} characters")
-                })
-            if 'maxLength' in bind_attrs:
-                validation_rules.append({
-                    "type": "maxLength",
-                    "value": bind_attrs['maxLength'],
-                    "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
-                })
-        
-        # Extract constraints from bind element
-        bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
-        if bind_elem is not None:
-            for constraint in bind_elem.findall(".//xf:constraint", self.namespaces):
-                constraint_value = constraint.get("value", "")
-                if "xxf:min-length" in constraint_value:
-                    # Extract the number from xxf:min-length(1)
-                    min_length = constraint_value.split("(")[1].split(")")[0]
+            # Extract validation rules from bind info
+            if bind_info and 'attributes' in bind_info:
+                logger.debug(f"Processing bind attributes for {field_name}: {bind_info['attributes']}")
+                bind_attrs = bind_info['attributes']
+                
+                # Handle required validation from XML bind attributes
+                if bind_attrs.get('required') == 'true()' or bind_attrs.get('required') == 'true':
+                    validation_rules.append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": bind_attrs.get('xxf:required-message', "This field is required")
+                    })
+                
+                # Handle pattern validation
+                if 'pattern' in bind_attrs:
+                    validation_rules.append({
+                        "type": "pattern",
+                        "value": bind_attrs['pattern'],
+                        "errorMessage": bind_attrs.get('xxf:pattern-message', "Invalid format")
+                    })
+                
+                # Handle min/max validation
+                if 'min' in bind_attrs:
+                    validation_rules.append({
+                        "type": "min",
+                        "value": bind_attrs['min'],
+                        "errorMessage": bind_attrs.get('xxf:min-message', f"Value must be at least {bind_attrs['min']}")
+                    })
+                if 'max' in bind_attrs:
+                    validation_rules.append({
+                        "type": "max",
+                        "value": bind_attrs['max'],
+                        "errorMessage": bind_attrs.get('xxf:max-message', f"Value must be at most {bind_attrs['max']}")
+                    })
+                
+                # Handle minLength/maxLength validation
+                if 'minLength' in bind_attrs:
                     validation_rules.append({
                         "type": "minLength",
-                        "value": int(min_length),
-                        "errorMessage": f"Value must be at least {min_length} characters"
+                        "value": bind_attrs['minLength'],
+                        "errorMessage": bind_attrs.get('xxf:minLength-message', f"Value must be at least {bind_attrs['minLength']} characters")
                     })
-                elif "xxf:max-length" in constraint_value:
-                    # Extract the number from xxf:max-length(3)
-                    max_length = constraint_value.split("(")[1].split(")")[0]
+                if 'maxLength' in bind_attrs:
                     validation_rules.append({
                         "type": "maxLength",
-                        "value": int(max_length),
-                        "errorMessage": f"Value must be at most {max_length} characters"
+                        "value": bind_attrs['maxLength'],
+                        "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                     })
-        
-        # Get label and hint from form resources
-        label = self.get_field_label(field_name)
-        hint = self.get_field_hint(field_name)
-        
-        # Fallback to bind info or formatted field name if no label found
-        if not label:
-            label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
-        
-        if field_type == "text-info":
-            field_obj = {
-                "type": "text-info",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "value": field_value
-            }
-        elif field_type == "text-input":
-            field_obj = {
-                "type": "text-input",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": None,
-                "inputType": "text",
-                "validation": validation_rules
-            }
-            if field_value:
-                field_obj["value"] = field_value
-        elif field_type == "text-area":
-            field_obj = {
-                "type": "text-area",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": None,
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "date":
-            field_obj = {
-                "type": "date",
-                "id": self.next_id(),
-                "fieldId": self.next_id(),
-                "label": label,
-                "placeholder": None,
-                "mask": "yyyy-MM-dd",
-                "codeContext": {
-                    "name": field_name
-                },
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "checkbox":
-            field_obj = {
-                "type": "checkbox",
-                "id": self.next_id(),
-                "label": label,
-                "webStyles": None,
-                "pdfStyles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "value": field_value == "true" if field_value is not None else False,
-                "validation": validation_rules
-            }
-        elif field_type == "radio":
-            field_obj = {
-                "type": "radio",
+            
+            # Extract constraints from bind element
+            bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
+            logger.debug(f"Found bind element for {field_name}: {bind_elem is not None}")
+            
+            if bind_elem is not None:
+                constraints = bind_elem.findall(".//xf:constraint", self.namespaces)
+                logger.debug(f"Found {len(constraints)} constraints for {field_name}")
+                
+                for constraint in constraints:
+                    constraint_value = constraint.get("value", "")
+                    logger.debug(f"Processing constraint for {field_name}: {constraint_value}")
+                    
+                    if "xxf:min-length" in constraint_value:
+                        # Extract the number from xxf:min-length(1)
+                        min_length = constraint_value.split("(")[1].split(")")[0]
+                        validation_rules.append({
+                            "type": "minLength",
+                            "value": int(min_length),
+                            "errorMessage": f"Value must be at least {min_length} characters"
+                        })
+                    elif "xxf:max-length" in constraint_value:
+                        # Extract the number from xxf:max-length(3)
+                        max_length = constraint_value.split("(")[1].split(")")[0]
+                        validation_rules.append({
+                            "type": "maxLength",
+                            "value": int(max_length),
+                            "errorMessage": f"Value must be at most {max_length} characters"
+                        })
+                    elif not any(x in constraint_value for x in ["xxf:min-length", "xxf:max-length"]):
+                        # Add any other constraint as formula type
+                        validation_rules.append({
+                            "type": "formula", 
+                            "value": constraint_value,
+                            "errorMessage": constraint.get("xxf:validation-message", "Invalid value")
+                        })
+
+                # Check if field is required
+                if bind_elem is not None and bind_elem.get('required') == 'true()':
+                    validation_rules.append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                    })
+            
+            # Get label and hint from form resources
+            label = self.get_field_label(field_name)
+            hint = self.get_field_hint(field_name)
+            logger.debug(f"Label for {field_name}: {label}, Hint: {hint}")
+            
+            # Fallback to bind info or formatted field name if no label found
+            if not label:
+                label = None
+                logger.debug(f"Using fallback label for {field_name}: {label}")
+            
+            # Create field object based on type
+            logger.debug(f"Creating field object of type {field_type} for {field_name}")
+            
+            # Create a base field object with common properties
+            base_field_obj = {
                 "id": self.next_id(),
                 "label": label,
                 "styles": None,
                 "codeContext": {
                     "name": field_name
                 },
-                "listItems": [],
-                "direction": "vertical",
-                "validation": validation_rules
+                "validation": validation_rules if validation_rules else []
             }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "dropdown":
-            field_obj = {
-                "id": self.next_id(),
-                "mask": None,
-                "size": "md",
-                "type": "dropdown",
-                "label": label,
-                "styles": None,
-                "isMulti": False,
-                "isInline": False,
-                "direction": "bottom",
-                "listItems": [],
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": "",
-                "selectionFeedback": "top-after-reopen",
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "signature":
-            field_obj = {
-                "type": "signature",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "email":
-            field_obj = {
-                "type": "text-input",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": "example@example.com",
-                "inputType": "email",
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "phone":
-            field_obj = {
-                "type": "text-input",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "mask": "(###) ###-####",
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": "(123) 456-7890",
-                "inputType": "tel",
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "address":
-            field_obj = {
-                "type": "text-area",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": "Street address",
-                "validation": validation_rules
-            }
-            if field_value and field_value.strip():
-                field_obj["value"] = field_value.strip()
-        elif field_type == "file":
-            field_obj = {
-                "type": "file",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "accept": field_attributes.get('mediatype', '*/*'),
-                "multiple": False,
-                "maxSize": None,  # Can be set from mapping if needed
-                "validation": validation_rules
-            }
-            if field_value:
-                field_obj["value"] = field_value
-            if field_attributes.get('filename'):
-                field_obj["filename"] = field_attributes.get('filename')
-            if field_attributes.get('size'):
-                field_obj["size"] = field_attributes.get('size')
-        elif field_type == "button":
-            field_obj = {
-                "type": "button",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "buttonType": "submit",
-                "validation": validation_rules
-            }
-            if field_value:
-                field_obj["value"] = field_value
-        elif field_type == "number":
-            field_obj = {
-                "type": "number-input",
-                "id": self.next_id(),
-                "label": label,
-                "styles": None,
-                "mask": None,
-                "codeContext": {
-                    "name": field_name
-                },
-                "placeholder": None,
-                "validation": validation_rules
-            }
-            if field_value:
-                field_obj["value"] = field_value
-        
-        # Apply any additional mappings
-        if mapping:
-            if mapping.get("required"):
-                if "validation" not in field_obj:
-                    field_obj["validation"] = []
-                field_obj["validation"].append({
-                    "type": "required",
-                    "value": True,
-                    "errorMessage": "This field is required"
-                })
-            if mapping.get("validation"):
-                if "validation" not in field_obj:
-                    field_obj["validation"] = []
-                field_obj["validation"].extend(mapping.get("validation", []))
-            if mapping.get("label"):
-                field_obj["label"] = mapping.get("label")
-            if mapping.get("helpText"):
-                field_obj["helpText"] = mapping.get("helpText")
-        
-        return field_obj
+            
+            # Add type-specific properties
+            if field_type == "text-info":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-info",
+                    "mask": None,
+                    "value": field_value
+                }
+            elif field_type == "text-input":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-input",
+                    "mask": None,
+                    "placeholder": None,
+                    "inputType": "text"
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            elif field_type == "text-area":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-area",
+                    "placeholder": None
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "date":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "date",
+                    "fieldId": self.next_id(),
+                    "placeholder": None,
+                    "mask": "yyyy-MM-dd"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "checkbox":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "checkbox",
+                    "webStyles": None,
+                    "pdfStyles": None,
+                    "mask": None,
+                    "value": field_value == "true" if field_value is not None else False
+                }
+            elif field_type == "checkbox-group":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "checkbox-group",
+                    "listItems": [],
+                    "direction": "vertical"
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            elif field_type == "radio":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "radio",
+                    "listItems": [],
+                    "direction": "vertical"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "dropdown":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "dropdown",
+                    "mask": None,
+                    "size": "md",
+                    "isMulti": False,
+                    "isInline": False,
+                    "direction": "bottom",
+                    "listItems": [],
+                    "placeholder": None,
+                    "selectionFeedback": "top-after-reopen"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "signature":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "signature"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "email":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-input",
+                    "mask": None,
+                    "placeholder": None,
+                    "inputType": "email"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "phone":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-input",
+                    "mask": "(###) ###-####",
+                    "placeholder": None,
+                    "inputType": "tel"
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "address":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-area",
+                    "placeholder": None
+                }
+                if field_value and field_value.strip():
+                    field_obj["value"] = field_value.strip()
+            elif field_type == "file":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "file",
+                    "accept": field_attributes.get('mediatype', '*/*'),
+                    "multiple": False,
+                    "maxSize": None
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+                if field_attributes.get('filename'):
+                    field_obj["filename"] = field_attributes.get('filename')
+                if field_attributes.get('size'):
+                    field_obj["size"] = field_attributes.get('size')
+            elif field_type == "button":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "button",
+                    "buttonType": "submit"
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            elif field_type == "number" or field_type == "number-input":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "number-input",
+                    "mask": None,
+                    "placeholder": None
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            else:
+                # Default case for unknown field types
+                logger.warning(f"Unknown field type '{field_type}' for field '{field_name}'. Using default text-input type.")
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-input",
+                    "mask": None,
+                    "placeholder": None,
+                    "inputType": "text"
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            
+            # Apply any additional mappings
+            if mapping and field_obj is not None:
+                logger.debug(f"Applying additional mappings for {field_name}: {mapping}")
+                if mapping.get("required"):
+                    if "validation" not in field_obj:
+                        field_obj["validation"] = []
+                    field_obj["validation"].append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": "This field is required"
+                    })
+                if mapping.get("validation"):
+                    if "validation" not in field_obj:
+                        field_obj["validation"] = []
+                    field_obj["validation"].extend(mapping.get("validation", []))
+                if mapping.get("label"):
+                    field_obj["label"] = mapping.get("label")
+                if mapping.get("helpText"):
+                    field_obj["helpText"] = mapping.get("helpText")
+            
+            # Remove validation field if validation array is empty
+            if field_obj is not None and "validation" in field_obj and not field_obj["validation"]:
+                del field_obj["validation"]
+            
+            logger.debug(f"Successfully created field object for {field_name}: {field_obj}")
+            return field_obj
+        except Exception as e:
+            logger.error(f"Error creating field object for {field_name}: {str(e)}", exc_info=True)
+            return None
     
     def format_section_name(self, section_name):
         """Format section name for display"""
