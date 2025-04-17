@@ -3,6 +3,8 @@ import json
 import os
 import uuid
 from datetime import datetime
+
+from bs4 import BeautifulSoup
 from src.report import Report
 
 class XDPParser:
@@ -429,33 +431,31 @@ class XDPParser:
     def process_root_elements(self):
         try:
             """Process top-level elements in the main subform"""
-            # Process all subforms to maintain document order
-            for subform in self.root_subform.findall(".//template:subform", self.namespaces):
-                # Process draws and exclGroups in this subform
-                for child in subform:
-                    if 'draw' in child.tag:
-                        field = self.process_draw(child)
-                        if field:
-                            self.all_items.append(field)
-                    elif 'exclGroup' in child.tag:
-                        group = self.process_exclgroup(child)
-                        if group:
-                            self.all_items.append(group)
-                    elif 'field' in child.tag:
-                        field_obj = self.process_field(child)
-                        if field_obj:
-                            field_script = self.process_script(child)
-                            if field_script:
-                                if "validation" in field_obj:
-                                    field_obj["validation"].append(field_script)
-                                else:
-                                    field_obj["validation"] = [field_script]
-                            self.all_items.append(field_obj)
+            # Only process direct children of root_subform, not all subforms
+            for child in self.root_subform:
+                if 'draw' in child.tag:
+                    field = self.process_draw(child)
+                    if field:
+                        self.all_items.append(field)
+                elif 'exclGroup' in child.tag:
                     
-                # Process any nested subforms
-                group = self.process_subform(subform)
-                if group:
-                    self.all_items.append(group)
+                    group = self.process_exclgroup(child)
+                    if group:
+                        self.all_items.append(group)
+                elif 'field' in child.tag:
+                    field_obj = self.process_field(child)
+                    if field_obj:
+                        field_script = self.process_script(child)
+                        if field_script:
+                            if "validation" in field_obj:
+                                field_obj["validation"].append(field_script)
+                            else:
+                                field_obj["validation"] = [field_script]
+                        self.all_items.append(field_obj)
+                elif 'subform' in child.tag:
+                    group = self.process_subform(child)
+                    if group:
+                        self.all_items.append(group)
         except Exception as e:
             print(f"Error processing root elements: {e}")
     
@@ -630,11 +630,30 @@ class XDPParser:
         """Extract label from field using multiple methods"""
         try:
             label = None
-            
+             # ✅ Method 0: Check for rich HTML caption (exData inside caption/value)
+            caption_elem = field.find(".//template:caption", self.namespaces)
+            if caption_elem is not None:
+                for val in caption_elem.findall(".//template:value", self.namespaces):
+                    exdata = val.find(".//template:exData", self.namespaces)
+                    if exdata is not None:
+                        # 🛠️ Even if exdata.text is None, extract the inner XML
+                        html_content = ET.tostring(exdata, encoding="unicode", method="xml")
+                        soup = BeautifulSoup(html_content, "html.parser")
+
+                        for tag_name in ["p", "div", "span"]:
+                            tag_elem = soup.find(tag_name)
+                            if tag_elem and tag_elem.get_text(strip=True):
+                                label = tag_elem.get_text(strip=True)
+                                break
+
+                        if not label:
+                            label = soup.get_text(strip=True)
+                        break
             # Method 1: Direct caption
-            caption_elem = field.find(".//template:caption//template:text", self.namespaces)
-            if caption_elem is not None and caption_elem.text:
-                label = caption_elem.text.strip()
+            if not label:
+                caption_elem = field.find(".//template:caption//template:text", self.namespaces)
+                if caption_elem is not None and caption_elem.text:
+                    label = caption_elem.text.strip()
             
             # Method 2: Value text that looks like a label
             if not label:
@@ -853,34 +872,16 @@ class XDPParser:
                 }
                 
                 # Extract items directly with their attributes using ElementTree's API
-                visible_items = []
-                saved_values = []
-                
-                # Get all items elements first
                 items_elements = field.findall("./template:items", self.namespaces)
                 for items_elem in items_elements:
-                    is_hidden = items_elem.get("presence") == "hidden"
-                    is_saved = items_elem.get("save") == "1"
-                    
                     # Get text elements within this items element
                     for text_elem in items_elem.findall("./template:text", self.namespaces):
-                        if is_saved:
-                            saved_values.append(text_elem)
-                        elif not is_hidden:
-                            visible_items.append(text_elem)
-
-                # Ensure correct mapping of labels and values
-                list_items = []
-                for index, item in enumerate(visible_items):
-                    value = saved_values[index].text if index < len(saved_values) else item.text
-                    if item.text:
-                        list_items.append({
-                            "text": item.text.strip(),
-                            "value": value.strip(),
-                            "name": value.strip()
-                        })
-
-                field_obj["listItems"] = list_items
+                        if text_elem.text:
+                            field_obj["listItems"].append({
+                                "text": text_elem.text.strip(),
+                                "value": text_elem.text.strip(),
+                                "name": text_elem.text.strip()
+                            })
             
             elif ui_tag == "checkButton":
                 # Check if this is a round checkButton (radio button)
@@ -890,15 +891,29 @@ class XDPParser:
                     "type": "radio" if is_radio else "checkbox",
                     "id": self.next_id(),
                     "label": label if label else "Radio" if is_radio else "Checkbox",
-                    "webStyles": None,
+                    "styles": None,
                     "pdfStyles": None,
                     "mask": None,
                     "codeContext": {
                         "name": field_name
                     },
+                    "listItems": [],
                     "databindings": {},
+                    "direction": "vertical",
+                    "value": False,
                     "conditions": []
                 }
+                # Extract items directly with their attributes using ElementTree's API
+                items_elements = field.findall("./template:items", self.namespaces)
+                for items_elem in items_elements:
+                    # Get integer elements within this items element
+                    for integer_elem in items_elem.findall("./template:integer", self.namespaces):
+                        if integer_elem.text:
+                            field_obj["listItems"].append({
+                                "text": str(integer_elem.text.strip()),
+                                "value": str(integer_elem.text.strip()),
+                                "name": str(integer_elem.text.strip())
+                            })
 
                 # Extract checkbox/radio default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
@@ -1120,13 +1135,20 @@ class XDPParser:
         except Exception as e:
             print(f"Error processing global scripts: {e}")
 
-    def process_subform(self, subform):
+    def process_subform(self, subform, parent_occur=None):
         try:
             """Process a subform element"""
             subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
             
             # Check if this is a repeating group (has occur element)
-            occur_elem = subform.find("./template:occur", self.namespaces)
+            occur_elem = parent_occur
+            for child in subform:
+                if 'occur' in child.tag:
+                    occur_elem = child
+                    break
+            # Check if this is the sbf_ParentInfo_rep subform
+            if subform_name == "sbf_ParentInfo_rep":
+                print("Found sbf_ParentInfo_rep subform")
             is_repeating = occur_elem is not None
             
             # Process any scripts and get conditions
@@ -1157,79 +1179,79 @@ class XDPParser:
                     ]
                 }
                 
-                # Process direct child fields in this subform (not descendants)
-                for field in subform.findall("./template:field", self.namespaces):
-                    field_obj = self.process_field(field)
-                    if field_obj:
-                        # Add conditions to each field
-                        if conditions:
-                            field_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for field identification
-                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                        group_obj["groupItems"][0]["fields"].append(field_obj)
+                # Process direct children in order
+                for child in subform:
+                    if 'field' in child.tag:
+                        field_obj = self.process_field(child)
+                        if field_obj:
+                            if conditions:
+                                field_obj["conditions"].extend(conditions)
+                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                            group_obj["groupItems"][0]["fields"].append(field_obj)
+                    elif 'exclGroup' in child.tag:
+                        
+                        group = self.process_exclgroup(child)
+                        if group:
+                            if conditions:
+                                if "conditions" not in group:
+                                    group["conditions"] = []
+                                group["conditions"].extend(conditions)
+                            group_obj["groupItems"][0]["fields"].append(group)
+                    elif 'draw' in child.tag:
+                        draw_obj = self.process_draw(child)
+                        if draw_obj:
+                            if conditions:
+                                if "conditions" not in draw_obj:
+                                    draw_obj["conditions"] = []
+                                draw_obj["conditions"].extend(conditions)
+                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                            group_obj["groupItems"][0]["fields"].append(draw_obj)
+                    elif 'subform' in child.tag:
+                        nested_group = self.process_subform(child, True)
+                        if nested_group:
+                            if conditions:
+                                if "conditions" not in nested_group:
+                                    nested_group["conditions"] = []
+                                nested_group["conditions"].extend(conditions)
+                            group_obj["groupItems"][0]["fields"].append(nested_group)
 
-                # Process direct child draw elements (not descendants)
-                for draw in subform.findall("./template:draw", self.namespaces):
-                    draw_obj = self.process_draw(draw)
-                    if draw_obj:
-                        # Add conditions to each draw element
-                        if conditions:
-                            if "conditions" not in draw_obj:
-                                draw_obj["conditions"] = []
-                            draw_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for draw identification
-                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                        group_obj["groupItems"][0]["fields"].append(draw_obj)
-
-                # Process direct child subforms (not descendants)
-                for nested_subform in subform.findall("./template:subform", self.namespaces):
-                    nested_group = self.process_subform(nested_subform)
-                    if nested_group:
-                        # Add conditions to nested group if they exist
-                        if conditions:
-                            if "conditions" not in nested_group:
-                                nested_group["conditions"] = []
-                            nested_group["conditions"].extend(conditions)
-                        group_obj["groupItems"][0]["fields"].append(nested_group)
-
-                # Add the group to all_items and return it
                 self.all_items.append(group_obj)
                 return group_obj
             else:
                 # Process non-repeating subform fields directly
-                for field in subform.findall("./template:field", self.namespaces):
-                    field_obj = self.process_field(field)
-                    if field_obj:
-                        # Add conditions to each field
-                        if conditions:
-                            field_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for field identification
-                        field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                        self.all_items.append(field_obj)
-
-                # Process direct child draw elements (not descendants)
-                for draw in subform.findall("./template:draw", self.namespaces):
-                    draw_obj = self.process_draw(draw)
-                    if draw_obj:
-                        # Add conditions to each draw element
-                        if conditions:
-                            if "conditions" not in draw_obj:
-                                draw_obj["conditions"] = []
-                            draw_obj["conditions"].extend(conditions)
-                        # Add subform name to codeContext for draw identification
-                        draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                        self.all_items.append(draw_obj)
-
-                # Process direct child subforms (not descendants)
-                for nested_subform in subform.findall("./template:subform", self.namespaces):
-                    nested_group = self.process_subform(nested_subform)
-                    if nested_group:
-                        # Add conditions to nested group if they exist
-                        if conditions:
-                            if "conditions" not in nested_group:
-                                nested_group["conditions"] = []
-                            nested_group["conditions"].extend(conditions)
-                        self.all_items.append(nested_group)
+                for child in subform:
+                    if 'field' in child.tag:
+                        field_obj = self.process_field(child)
+                        if field_obj:
+                            if conditions:
+                                field_obj["conditions"].extend(conditions)
+                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
+                            self.all_items.append(field_obj)
+                    elif 'exclGroup' in child.tag:
+                        group = self.process_exclgroup(child)
+                        if group:
+                            if conditions:
+                                if "conditions" not in group:
+                                    group["conditions"] = []
+                                group["conditions"].extend(conditions)
+                            self.all_items.append(group)
+                    elif 'draw' in child.tag:
+                        draw_obj = self.process_draw(child)
+                        if draw_obj:
+                            if conditions:
+                                if "conditions" not in draw_obj:
+                                    draw_obj["conditions"] = []
+                                draw_obj["conditions"].extend(conditions)
+                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
+                            self.all_items.append(draw_obj)
+                    elif 'subform' in child.tag:
+                        nested_group = self.process_subform(child)
+                        if nested_group:
+                            if conditions:
+                                if "conditions" not in nested_group:
+                                    nested_group["conditions"] = []
+                                nested_group["conditions"].extend(conditions)
+                            self.all_items.append(nested_group)
 
                 return None
 
@@ -1241,11 +1263,7 @@ class XDPParser:
         try:
             """Process an exclusion group (radio button group)"""
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
-            
-            # Add logging for exclusion group processing
-            print(f"\nProcessing exclusion group '{group_name}'")
-            print(f"Location in XML: {self.breadcrumb}")
-            
+                        
             # Process any scripts and get conditions
             conditions = []
             script_result = self.process_script(exclgroup)
@@ -1266,6 +1284,7 @@ class XDPParser:
                 "validation": [],
                 "value": False
             }
+            
             
             # Process fields to create list items
             for field in exclgroup.findall("./template:field", self.namespaces):
