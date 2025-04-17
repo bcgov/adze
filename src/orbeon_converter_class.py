@@ -909,7 +909,7 @@ class OrbeonParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "placeholder": "",
+                    "placeholder": None,
                     "selectionFeedback": "top-after-reopen",
                     "validation": validation_rules
                 }
@@ -938,7 +938,7 @@ class OrbeonParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "placeholder": "example@example.com",
+                    "placeholder": None,
                     "inputType": "email",
                     "validation": validation_rules
                 }
@@ -954,7 +954,7 @@ class OrbeonParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "placeholder": "(123) 456-7890",
+                    "placeholder": None,
                     "inputType": "tel",
                     "validation": validation_rules
                 }
@@ -969,7 +969,7 @@ class OrbeonParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "placeholder": "Street address",
+                    "placeholder": None,
                     "validation": validation_rules
                 }
                 if field_value and field_value.strip():
