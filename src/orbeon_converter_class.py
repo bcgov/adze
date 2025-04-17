@@ -464,7 +464,7 @@ class OrbeonParser:
                 # Create the text input field for "Other"
                 other_field = self.create_field_object("text-input", f"{field_name}-other", None, {}, None)
                 other_field["label"] = "Other"
-                other_field["placeholder"] = "Please specify"
+                other_field["placeholder"] = None
                 other_field["codeContext"] = {
                     "name": f"{field_name}-other"
                 }
