@@ -2,8 +2,13 @@ import xml.etree.ElementTree as ET
 import json
 import os
 import uuid
+import logging
 from datetime import datetime
 from src.report import Report
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class OrbeonParser:
     def __init__(self, xml_filename, mapping_file=None):
@@ -708,14 +713,20 @@ class OrbeonParser:
     def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
         """Create field object based on field type"""
         try:
+            logger.debug(f"Creating field object for {field_name} with type {field_type}")
+            logger.debug(f"Field value: {field_value}, Attributes: {field_attributes}, Mapping: {mapping}")
+            
             field_obj = None
             
             # Get bind information for validation and label
             bind_info = self.get_bind_info(field_name)
+            logger.debug(f"Bind info for {field_name}: {bind_info}")
+            
             validation_rules = []
             
             # Extract validation rules from bind info
             if bind_info and 'attributes' in bind_info:
+                logger.debug(f"Processing bind attributes for {field_name}: {bind_info['attributes']}")
                 bind_attrs = bind_info['attributes']
                 
                 # Handle required validation from XML bind attributes
@@ -764,9 +775,16 @@ class OrbeonParser:
             
             # Extract constraints from bind element
             bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
+            logger.debug(f"Found bind element for {field_name}: {bind_elem is not None}")
+            
             if bind_elem is not None:
-                for constraint in bind_elem.findall(".//xf:constraint", self.namespaces):
+                constraints = bind_elem.findall(".//xf:constraint", self.namespaces)
+                logger.debug(f"Found {len(constraints)} constraints for {field_name}")
+                
+                for constraint in constraints:
                     constraint_value = constraint.get("value", "")
+                    logger.debug(f"Processing constraint for {field_name}: {constraint_value}")
+                    
                     if "xxf:min-length" in constraint_value:
                         # Extract the number from xxf:min-length(1)
                         min_length = constraint_value.split("(")[1].split(")")[0]
@@ -802,191 +820,147 @@ class OrbeonParser:
             # Get label and hint from form resources
             label = self.get_field_label(field_name)
             hint = self.get_field_hint(field_name)
+            logger.debug(f"Label for {field_name}: {label}, Hint: {hint}")
             
             # Fallback to bind info or formatted field name if no label found
             if not label:
                 label = bind_info.get('name', '') if bind_info and bind_info.get('name') else self.format_field_name(field_name)
+                logger.debug(f"Using fallback label for {field_name}: {label}")
             
             # Create field object based on type
+            logger.debug(f"Creating field object of type {field_type} for {field_name}")
+            
+            # Create a base field object with common properties
+            base_field_obj = {
+                "id": self.next_id(),
+                "label": label,
+                "styles": None,
+                "codeContext": {
+                    "name": field_name
+                },
+                "validation": validation_rules if validation_rules else []
+            }
+            
+            # Add type-specific properties
             if field_type == "text-info":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-info",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
                     "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "value": field_value
                 }
             elif field_type == "text-input":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-input",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
                     "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "placeholder": None,
-                    "inputType": "text",
-                    "validation": validation_rules
+                    "inputType": "text"
                 }
                 if field_value:
                     field_obj["value"] = field_value
             elif field_type == "text-area":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-area",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "placeholder": None,
-                    "validation": validation_rules
+                    "placeholder": None
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "date":
                 field_obj = {
+                    **base_field_obj,
                     "type": "date",
-                    "id": self.next_id(),
                     "fieldId": self.next_id(),
-                    "label": label,
                     "placeholder": None,
-                    "mask": "yyyy-MM-dd",
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "validation": validation_rules
+                    "mask": "yyyy-MM-dd"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "checkbox":
                 field_obj = {
+                    **base_field_obj,
                     "type": "checkbox",
-                    "id": self.next_id(),
-                    "label": label,
                     "webStyles": None,
                     "pdfStyles": None,
                     "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "value": field_value == "true" if field_value is not None else False,
-                    "validation": validation_rules
+                    "value": field_value == "true" if field_value is not None else False
                 }
+            elif field_type == "checkbox-group":
+                field_obj = {
+                    **base_field_obj,
+                    "type": "checkbox-group",
+                    "listItems": [],
+                    "direction": "vertical"
+                }
+                if field_value:
+                    field_obj["value"] = field_value
             elif field_type == "radio":
                 field_obj = {
+                    **base_field_obj,
                     "type": "radio",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "listItems": [],
-                    "direction": "vertical",
-                    "validation": validation_rules
+                    "direction": "vertical"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "dropdown":
                 field_obj = {
-                    "id": self.next_id(),
+                    **base_field_obj,
+                    "type": "dropdown",
                     "mask": None,
                     "size": "md",
-                    "type": "dropdown",
-                    "label": label,
-                    "styles": None,
                     "isMulti": False,
                     "isInline": False,
                     "direction": "bottom",
                     "listItems": [],
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "placeholder": None,
-                    "selectionFeedback": "top-after-reopen",
-                    "validation": validation_rules
+                    "selectionFeedback": "top-after-reopen"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "signature":
                 field_obj = {
-                    "type": "signature",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "validation": validation_rules
+                    **base_field_obj,
+                    "type": "signature"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "email":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-input",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
                     "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "placeholder": None,
-                    "inputType": "email",
-                    "validation": validation_rules
+                    "inputType": "email"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "phone":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-input",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
                     "mask": "(###) ###-####",
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "placeholder": None,
-                    "inputType": "tel",
-                    "validation": validation_rules
+                    "inputType": "tel"
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "address":
                 field_obj = {
+                    **base_field_obj,
                     "type": "text-area",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "placeholder": None,
-                    "validation": validation_rules
+                    "placeholder": None
                 }
                 if field_value and field_value.strip():
                     field_obj["value"] = field_value.strip()
             elif field_type == "file":
                 field_obj = {
+                    **base_field_obj,
                     "type": "file",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
                     "accept": field_attributes.get('mediatype', '*/*'),
                     "multiple": False,
-                    "maxSize": None,  # Can be set from mapping if needed
-                    "validation": validation_rules
+                    "maxSize": None
                 }
                 if field_value:
                     field_obj["value"] = field_value
@@ -996,36 +970,37 @@ class OrbeonParser:
                     field_obj["size"] = field_attributes.get('size')
             elif field_type == "button":
                 field_obj = {
+                    **base_field_obj,
                     "type": "button",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
-                    "buttonType": "submit",
-                    "validation": validation_rules
+                    "buttonType": "submit"
                 }
                 if field_value:
                     field_obj["value"] = field_value
-            elif field_type == "number":
+            elif field_type == "number" or field_type == "number-input":
                 field_obj = {
+                    **base_field_obj,
                     "type": "number-input",
-                    "id": self.next_id(),
-                    "label": label,
-                    "styles": None,
                     "mask": None,
-                    "codeContext": {
-                        "name": field_name
-                    },
+                    "placeholder": None
+                }
+                if field_value:
+                    field_obj["value"] = field_value
+            else:
+                # Default case for unknown field types
+                logger.warning(f"Unknown field type '{field_type}' for field '{field_name}'. Using default text-input type.")
+                field_obj = {
+                    **base_field_obj,
+                    "type": "text-input",
+                    "mask": None,
                     "placeholder": None,
-                    "validation": validation_rules
+                    "inputType": "text"
                 }
                 if field_value:
                     field_obj["value"] = field_value
             
             # Apply any additional mappings
-            if mapping:
+            if mapping and field_obj is not None:
+                logger.debug(f"Applying additional mappings for {field_name}: {mapping}")
                 if mapping.get("required"):
                     if "validation" not in field_obj:
                         field_obj["validation"] = []
@@ -1044,12 +1019,13 @@ class OrbeonParser:
                     field_obj["helpText"] = mapping.get("helpText")
             
             # Remove validation field if validation array is empty
-            if "validation" in field_obj and not field_obj["validation"]:
+            if field_obj is not None and "validation" in field_obj and not field_obj["validation"]:
                 del field_obj["validation"]
             
+            logger.debug(f"Successfully created field object for {field_name}: {field_obj}")
             return field_obj
         except Exception as e:
-            print(f"Error creating field object for {field_name}: {e}")
+            logger.error(f"Error creating field object for {field_name}: {str(e)}", exc_info=True)
             return None
     
     def format_section_name(self, section_name):
