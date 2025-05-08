@@ -772,8 +772,35 @@ class XDPParser:
                 
                 # Check for special field types based on field name if no mapping found
                 if not field_type and ("area" in field_name.lower() or 
-                                    any(area in field_name.lower() for area in ["comment", "description", "notes"])):
+                                    any(area_keyword in field_name.lower() for area_keyword in ["comment", "description", "notes"])):
                     field_obj["type"] = "text-area"
+
+                # Add phone number mask and validation if it's a phone field
+                is_phone_field = False
+                current_label_lower = label.lower() if label else ""
+                field_name_lower = field_name.lower()
+
+                if "phone" in current_label_lower or "telephone" in current_label_lower or \
+                   "phone" in field_name_lower or "telephone" in field_name_lower:
+                    is_phone_field = True
+                
+                if is_phone_field and field_obj["type"] == "text-input": # Apply only to text-input types
+                    field_obj["mask"] = "(999) 999-9999"
+                    if "validation" not in field_obj or not isinstance(field_obj["validation"], list):
+                        field_obj["validation"] = [] # Ensure validation is a list
+                    
+                    # Check if a similar phone pattern validation already exists
+                    has_phone_pattern = any(
+                        v.get("type") == "pattern" and "phone number" in v.get("errorMessage", "").lower()
+                        for v in field_obj["validation"]
+                    )
+                    
+                    if not has_phone_pattern:
+                        field_obj["validation"].append({
+                            "type": "pattern",
+                            "value": "^\\+?(\\d{1,3})?[-._(]?\\(?\\d{1,4}\\)?[-. )]?\\d{1,4}[-. ]? \\d{1,9}(?: x\\d+)?$",
+                            "errorMessage": "Invalid phone number format."
+                        })
                 
                 # Add databinding if available
                 if binding_ref:
@@ -819,23 +846,15 @@ class XDPParser:
                         field_obj["databindings"]["source"] = mapping.get("dataSource")
             
             elif ui_tag == "dateTimeEdit":
-                # Extract the date format if available
-                date_format = "yyyy-MM-dd"  # Default format
-                format_elem = field.find("./template:format/template:picture", self.namespaces)
-                if format_elem is not None and format_elem.text:
-                    date_format = format_elem.text.lower().replace("yyyy", "Y").replace("dd", "d").replace("mm", "m")
-
                 field_obj = {
                     "type": "date",
-                    "label": label,
                     "id": self.next_id(),
-                    "fieldId": str(self.next_id()),
+                    "label": label,
                     "codeContext": {
                         "name": None
                     },
-                    "label": label,
-                    "placeholder": None,
-                    "mask": date_format,
+                    "placeholder": "mm/dd/yyyy",
+                    "mask": "Y-m-d",
                     "conditions": []
                 }
             
