@@ -536,7 +536,7 @@ class XDPParser:
             if mapping and mapping.get("fieldType"):
                 field_type = mapping.get("fieldType")
             elif is_text_edit:
-                field_type = "text-input"
+                field_type = "text-info"
             elif "foi" in draw_name.lower():
                 field_type = "foi_statement"
             elif text_value:
