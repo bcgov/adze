@@ -852,6 +852,12 @@ class XDPParser:
                     "inputType": "number",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
                 
                 if binding_ref:
                     field_obj["databindings"] = {"path": binding_ref}
@@ -872,6 +878,12 @@ class XDPParser:
                     "mask": "Y-m-d",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
             
             elif ui_tag == "button":
                 field_obj = {
@@ -885,6 +897,12 @@ class XDPParser:
                     "buttonType": "submit",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
             
             elif ui_tag == "choiceList":
                 field_obj = {
@@ -992,6 +1010,12 @@ class XDPParser:
                     "placeholder": "",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
 
             # Process any scripts and get conditions after field_obj is created
             if field_obj:
