@@ -1008,20 +1008,16 @@ class XDPParser:
         try:
             # Replace common escape sequences with their actual characters
             replacements = {
-                '\\n': ' ',  # Replace newlines with spaces
-                '\\t': ' ',  # Replace tabs with spaces
-                '\\r': ' ',  # Replace carriage returns with spaces
-                '\\"': '"',  # Replace escaped quotes with actual quotes
-                "\\'": "'",  # Replace escaped single quotes with actual single quotes
-                '\\\\': '\\' # Replace double backslashes with single backslash
+                '\n': ' ',      # Replace actual newline characters
+                '\t': ' ',      # Replace actual tab characters
+                '\r': ' ',      # Replace actual carriage return characters
+                '\\\\': '\\\\'     # Replace two literal backslashes with one
+                # Escaped quotes like \" and \' are not included, so they remain as is.
             }
             
             # Apply replacements
             for old, new in replacements.items():
                 text = text.replace(old, new)
-            
-            # Remove any remaining escape characters
-            text = text.replace('\\', '')
             
             # Clean up multiple spaces
             text = ' '.join(text.split())
@@ -1115,6 +1111,7 @@ class XDPParser:
             script = script.replace(".presence = 'hidden'", ".style.display = 'none'")
             script = script.replace(".presence = 'visible'", ".style.display = 'block'")
             
+            
             # Handle field references
             # Replace direct field references with document.getElementById calls
             import re
@@ -1146,8 +1143,10 @@ class XDPParser:
             for script_tag in script_tags:
                 script_text = script_tag.text
                 if script_text:
+                    # Clean up escape characters in the script text
+                    cleaned_script = self._clean_escape_characters(script_text)
                     # Convert the script as a global script
-                    converted_script = self.convert_adobe_script(script_text, "global", "initialize", True)
+                    converted_script = self.convert_adobe_script(cleaned_script, "global", "initialize", True)
                     if converted_script:
                         # Add to JavaScript section
                         self.javascript_section["global"] = converted_script
