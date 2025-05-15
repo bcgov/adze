@@ -682,7 +682,9 @@ class XDPParser:
         try:
             """Process a field element"""
             field_name = field.attrib.get("name", f"field_{self.id_counter}")
-            
+
+            presence = field.attrib.get("presence", "").lower()
+
             # Get current XML path for mapping lookup
             self.add_breadcrumb(field_name, field)
             current_path = self.get_breadcrumb()
@@ -744,9 +746,16 @@ class XDPParser:
                     "accept": "*/*",
                     "multiple": False,
                     "maxSize": None,
-                    "validation": []
+                    "validation": [],
+                    "conditions": []
                 }
-                
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
+
                 # Add databinding if available
                 if binding_ref:
                     field_obj["databindings"] = {"path": binding_ref}
@@ -769,6 +778,12 @@ class XDPParser:
                     "inputType": "text",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })                
                 
                 # Check for special field types based on field name if no mapping found
                 if not field_type and ("area" in field_name.lower() or 
@@ -837,6 +852,12 @@ class XDPParser:
                     "inputType": "number",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
                 
                 if binding_ref:
                     field_obj["databindings"] = {"path": binding_ref}
@@ -857,6 +878,12 @@ class XDPParser:
                     "mask": "Y-m-d",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
             
             elif ui_tag == "button":
                 field_obj = {
@@ -870,6 +897,12 @@ class XDPParser:
                     "buttonType": "submit",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
             
             elif ui_tag == "choiceList":
                 field_obj = {
@@ -889,6 +922,12 @@ class XDPParser:
                     "placeholder": "",
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
                 
                 # Extract items directly with their attributes using ElementTree's API
                 items_elements = field.findall("./template:items", self.namespaces)
@@ -922,6 +961,13 @@ class XDPParser:
                     "value": False,
                     "conditions": []
                 }
+
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
+
                 # Extract items directly with their attributes using ElementTree's API
                 items_elements = field.findall("./template:items", self.namespaces)
                 for items_elem in items_elements:
@@ -965,6 +1011,12 @@ class XDPParser:
                     "conditions": []
                 }
 
+                if presence == "hidden":
+                    field_obj["conditions"].append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
+
             # Process any scripts and get conditions after field_obj is created
             if field_obj:
                 script_result = self.process_script(field)
@@ -981,6 +1033,11 @@ class XDPParser:
             self.remove_breadcrumb(field_name)
             
             if field_obj is not None:
+                if presence == "hidden":
+                    field_obj.setdefault("conditions", []).append({
+                        "type": "visibility",
+                        "value": "{ return false }"
+                    })
                 self.Report.report_success(field_obj["type"], 'text-info', field_obj["label"])
                 
                 # Apply any additional mappings to field_obj
@@ -1114,10 +1171,14 @@ class XDPParser:
             script = script_text.replace("this.rawValue", "document.getElementById('" + field_id + "').value")
             script = script.replace(".presence = 'hidden'", ".style.display = 'none'")
             script = script.replace(".presence = 'visible'", ".style.display = 'block'")
+
+            import re
+            # Fix missing dot after bracketed field reference
+            script = re.sub(r"(formStates\['[^']+'\])(\w+)", r"\1.\2", script)
             
+
             # Handle field references
             # Replace direct field references with document.getElementById calls
-            import re
             field_refs = re.findall(r'(\w+)\.', script)
             for ref in field_refs:
                 if ref != 'document':
