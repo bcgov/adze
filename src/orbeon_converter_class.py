@@ -772,12 +772,51 @@ class OrbeonParser:
                         "value": bind_attrs['maxLength'],
                         "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                     })
+                
+                # Handle formula type validations
+                if 'constraint' in bind_attrs:
+                    validation_rules.append({
+                        "type": "formula",
+                        "value": bind_attrs['constraint'],
+                        "errorMessage": bind_attrs.get('xxf:constraint-message', "Invalid value")
+                    })
+                
+                # Handle type-specific validations
+                if 'type' in bind_attrs:
+                    if bind_attrs['type'] == 'xs:decimal' or bind_attrs['type'] == 'xs:integer':
+                        validation_rules.append({
+                            "type": "number",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid number")
+                        })
+                    elif bind_attrs['type'] == 'xs:date':
+                        validation_rules.append({
+                            "type": "date",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid date")
+                        })
+                    elif bind_attrs['type'] == 'xs:email':
+                        validation_rules.append({
+                            "type": "email",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid email address")
+                        })
             
             # Extract constraints from bind element
             bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
             logger.debug(f"Found bind element for {field_name}: {bind_elem is not None}")
             
             if bind_elem is not None:
+                # Check if field is required from bind element
+                required_attr = bind_elem.get('required')
+                if required_attr in ['true()', 'true']:
+                    validation_rules.append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                    })
+                
+                # Process constraint elements
                 constraints = bind_elem.findall(".//xf:constraint", self.namespaces)
                 logger.debug(f"Found {len(constraints)} constraints for {field_name}")
                 
@@ -801,20 +840,21 @@ class OrbeonParser:
                             "value": int(max_length),
                             "errorMessage": f"Value must be at most {max_length} characters"
                         })
-                    elif not any(x in constraint_value for x in ["xxf:min-length", "xxf:max-length"]):
+                    else:
                         # Add any other constraint as formula type
                         validation_rules.append({
                             "type": "formula", 
                             "value": constraint_value,
                             "errorMessage": constraint.get("xxf:validation-message", "Invalid value")
                         })
-
-                # Check if field is required
-                if bind_elem is not None and bind_elem.get('required') == 'true()':
+                
+                # Process direct constraint attribute
+                direct_constraint = bind_elem.get('constraint')
+                if direct_constraint:
                     validation_rules.append({
-                        "type": "required",
-                        "value": True,
-                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                        "type": "formula",
+                        "value": direct_constraint,
+                        "errorMessage": bind_elem.get('xxf:constraint-message', "Invalid value")
                     })
             
             # Get label and hint from form resources
