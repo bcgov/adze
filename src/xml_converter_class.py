@@ -1171,7 +1171,8 @@ class XDPParser:
             import re
             # Fix missing dot after bracketed field reference
             script = re.sub(r"(formStates\['[^']+'\])(\w+)", r"\1.\2", script)
-            
+
+            # Handle field reference
             # Replace direct field references with document.getElementById calls
             field_refs = re.findall(r'(\w+)\.', script)
             for ref in field_refs:
