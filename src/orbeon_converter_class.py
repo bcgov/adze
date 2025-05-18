@@ -713,6 +713,11 @@ class OrbeonParser:
     def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
         """Create field object based on field type"""
         try:
+            # If determine_field_type explicitly decided this element shouldn't be a field,
+            # then field_type will be None. In this case, don't create any field object.
+            if field_type is None:
+                return None
+
             logger.debug(f"Creating field object for {field_name} with type {field_type}")
             logger.debug(f"Field value: {field_value}, Attributes: {field_attributes}, Mapping: {mapping}")
             
