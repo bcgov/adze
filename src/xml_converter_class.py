@@ -1351,13 +1351,15 @@ class XDPParser:
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
+            # Define group_name here to ensure it's available in the except block
+            group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
             radio_obj = self._process_exclgroup_internal(exclgroup)
             if radio_obj:
                 self.all_items.append(radio_obj)
             return None # Original behavior maintained for root-level calls
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
-            self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
+            self.Report.report_error(group_name, # Now group_name is defined
                                     'radio', 
                                     "Error processing exclusion group")
             return None
