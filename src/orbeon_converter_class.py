@@ -877,9 +877,11 @@ class OrbeonParser:
                 "styles": None,
                 "codeContext": {
                     "name": field_name
-                },
-                "validation": validation_rules if validation_rules else []
+                }
             }
+
+            if validation_rules:  # Add validation key only if validation_rules is not empty
+                base_field_obj["validation"] = validation_rules
             
             # Add type-specific properties
             if field_type == "text-info":
