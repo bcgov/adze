@@ -1065,20 +1065,16 @@ class XDPParser:
         try:
             # Replace common escape sequences with their actual characters
             replacements = {
-                '\\n': ' ',  # Replace newlines with spaces
-                '\\t': ' ',  # Replace tabs with spaces
-                '\\r': ' ',  # Replace carriage returns with spaces
-                '\\"': '"',  # Replace escaped quotes with actual quotes
-                "\\'": "'",  # Replace escaped single quotes with actual single quotes
-                '\\\\': '\\' # Replace double backslashes with single backslash
+                '\n': ' ',      # Replace actual newline characters
+                '\t': ' ',      # Replace actual tab characters
+                '\r': ' ',      # Replace actual carriage return characters
+                '\\\\': '\\\\'     # Replace two literal backslashes with one
+                # Escaped quotes like \" and \' are not included, so they remain as is.
             }
             
             # Apply replacements
             for old, new in replacements.items():
                 text = text.replace(old, new)
-            
-            # Remove any remaining escape characters
-            text = text.replace('\\', '')
             
             # Clean up multiple spaces
             text = ' '.join(text.split())
@@ -1175,9 +1171,8 @@ class XDPParser:
             import re
             # Fix missing dot after bracketed field reference
             script = re.sub(r"(formStates\['[^']+'\])(\w+)", r"\1.\2", script)
-            
 
-            # Handle field references
+            # Handle field reference
             # Replace direct field references with document.getElementById calls
             field_refs = re.findall(r'(\w+)\.', script)
             for ref in field_refs:
@@ -1207,187 +1202,164 @@ class XDPParser:
             for script_tag in script_tags:
                 script_text = script_tag.text
                 if script_text:
+                    # Clean up escape characters in the script text
+                    cleaned_script = self._clean_escape_characters(script_text)
                     # Convert the script as a global script
-                    converted_script = self.convert_adobe_script(script_text, "global", "initialize", True)
+                    converted_script = self.convert_adobe_script(cleaned_script, "global", "initialize", True)
                     if converted_script:
                         # Add to JavaScript section
                         self.javascript_section["global"] = converted_script
         except Exception as e:
             print(f"Error processing global scripts: {e}")
 
-    def process_subform(self, subform, parent_occur=None):
+    def process_subform(self, subform_element, parent_group_items_fields=None):
         try:
-            """Process a subform element"""
-            subform_name = subform.attrib.get("name", f"subform_{self.id_counter}")
-            
-            # Check if this is a repeating group (has occur element)
-            occur_elem = parent_occur
-            for child in subform:
-                if 'occur' in child.tag:
-                    occur_elem = child
-                    break
-            # Check if this is the sbf_ParentInfo_rep subform
-            if subform_name == "sbf_ParentInfo_rep":
-                print("Found sbf_ParentInfo_rep subform")
-            is_repeating = occur_elem is not None
-            
-            # Process any scripts and get conditions
-            conditions = []
-            script_result = self.process_script(subform)
-            if script_result:
-                if script_result["type"] == "visibility":
-                    conditions.append(script_result)
-                elif script_result["type"] == "javascript":
-                    conditions.append(script_result)
+            subform_name = subform_element.attrib.get("name", f"subform_{self.id_counter}")
+            self.add_breadcrumb(f"subform name='{subform_name}'", subform_element) # Add to breadcrumb
 
-            # Create group object if this is a repeating group
-            if is_repeating:
-                group_obj = {
+            occur_elem = subform_element.find("./template:occur", self.namespaces)
+            is_this_subform_a_repeater = occur_elem is not None
+
+            current_processing_target_list = None
+            newly_created_group_for_this_subform = None
+            
+            # Script conditions for the subform itself
+            subform_conditions = []
+            script_result = self.process_script(subform_element)
+            if script_result:
+                if script_result.get("type") == "visibility": # Check type exists
+                    subform_conditions.append(script_result)
+                elif script_result.get("type") == "javascript":
+                     subform_conditions.append(script_result)
+
+            if parent_group_items_fields is not None:
+                current_processing_target_list = parent_group_items_fields
+            elif is_this_subform_a_repeater:
+                group_label = self.extract_label(subform_element)
+                newly_created_group_for_this_subform = {
                     "type": "group",
                     "id": self.next_id(),
-                    "label": None,
+                    "label":  None,
                     "styles": None,
-                    "codeContext": {
-                        "name": subform_name
-                    },
+                    "codeContext": {"name": subform_name}, 
                     "repeater": True,
-                    "conditions": conditions,
-                    "groupItems": [
-                        {
-                            "fields": []
-                        }
-                    ]
+                    "conditions": subform_conditions, 
+                    "groupItems": [{"fields": []}]
                 }
-                
-                # Process direct children in order
-                for child in subform:
-                    if 'field' in child.tag:
-                        field_obj = self.process_field(child)
-                        if field_obj:
-                            if conditions:
-                                field_obj["conditions"].extend(conditions)
-                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                            group_obj["groupItems"][0]["fields"].append(field_obj)
-                    elif 'exclGroup' in child.tag:
-                        
-                        group = self.process_exclgroup(child)
-                        if group:
-                            if conditions:
-                                if "conditions" not in group:
-                                    group["conditions"] = []
-                                group["conditions"].extend(conditions)
-                            group_obj["groupItems"][0]["fields"].append(group)
-                    elif 'draw' in child.tag:
-                        draw_obj = self.process_draw(child)
-                        if draw_obj:
-                            if conditions:
-                                if "conditions" not in draw_obj:
-                                    draw_obj["conditions"] = []
-                                draw_obj["conditions"].extend(conditions)
-                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                            group_obj["groupItems"][0]["fields"].append(draw_obj)
-                    elif 'subform' in child.tag:
-                        nested_group = self.process_subform(child, True)
-                        if nested_group:
-                            if conditions:
-                                if "conditions" not in nested_group:
-                                    nested_group["conditions"] = []
-                                nested_group["conditions"].extend(conditions)
-                            group_obj["groupItems"][0]["fields"].append(nested_group)
-
-                self.all_items.append(group_obj)
-                return group_obj
+                current_processing_target_list = newly_created_group_for_this_subform["groupItems"][0]["fields"]
+                self.all_items.append(newly_created_group_for_this_subform)
             else:
-                # Process non-repeating subform fields directly
-                for child in subform:
-                    if 'field' in child.tag:
-                        field_obj = self.process_field(child)
-                        if field_obj:
-                            if conditions:
-                                field_obj["conditions"].extend(conditions)
-                            field_obj["codeContext"]["name"] = f"{subform_name}_{field_obj['codeContext']['name']}" if field_obj['codeContext']['name'] else subform_name
-                            self.all_items.append(field_obj)
-                    elif 'exclGroup' in child.tag:
-                        group = self.process_exclgroup(child)
-                        if group:
-                            if conditions:
-                                if "conditions" not in group:
-                                    group["conditions"] = []
-                                group["conditions"].extend(conditions)
-                            self.all_items.append(group)
-                    elif 'draw' in child.tag:
-                        draw_obj = self.process_draw(child)
-                        if draw_obj:
-                            if conditions:
-                                if "conditions" not in draw_obj:
-                                    draw_obj["conditions"] = []
-                                draw_obj["conditions"].extend(conditions)
-                            draw_obj["codeContext"]["name"] = f"{subform_name}_{draw_obj['codeContext']['name']}" if draw_obj['codeContext']['name'] else subform_name
-                            self.all_items.append(draw_obj)
-                    elif 'subform' in child.tag:
-                        nested_group = self.process_subform(child)
-                        if nested_group:
-                            if conditions:
-                                if "conditions" not in nested_group:
-                                    nested_group["conditions"] = []
-                                nested_group["conditions"].extend(conditions)
-                            self.all_items.append(nested_group)
+                current_processing_target_list = self.all_items
 
-                return None
+            is_flat_target_for_prefixing = (current_processing_target_list is self.all_items) and not parent_group_items_fields
 
+            for child in subform_element:
+                child_tag_type = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+
+                if child_tag_type == 'field':
+                    field_obj = self.process_field(child)
+                    if field_obj:
+                        if is_flat_target_for_prefixing and subform_name:
+                            original_cc_name = field_obj["codeContext"].get("name")
+                            field_obj["codeContext"]["name"] = f"{subform_name}_{original_cc_name}" if original_cc_name else subform_name
+                        current_processing_target_list.append(field_obj)
+                elif child_tag_type == 'exclGroup':
+                    excl_group_obj = self._process_exclgroup_internal(child)
+                    if excl_group_obj:
+                        if is_flat_target_for_prefixing and subform_name:
+                            original_cc_name = excl_group_obj["codeContext"].get("name")
+                            excl_group_obj["codeContext"]["name"] = f"{subform_name}_{original_cc_name}" if original_cc_name else subform_name
+                        current_processing_target_list.append(excl_group_obj)
+                elif child_tag_type == 'draw':
+                    draw_obj = self.process_draw(child)
+                    if draw_obj:
+                        if is_flat_target_for_prefixing and subform_name:
+                            original_cc_name = draw_obj["codeContext"].get("name")
+                            draw_obj["codeContext"]["name"] = f"{subform_name}_{original_cc_name}" if original_cc_name else subform_name
+                        current_processing_target_list.append(draw_obj)
+                elif child_tag_type == 'subform':
+                    if newly_created_group_for_this_subform:
+                        self.process_subform(child, parent_group_items_fields=current_processing_target_list)
+                    else:
+                        self.process_subform(child, parent_group_items_fields=current_processing_target_list if parent_group_items_fields is not None else None)
+            
+            self.remove_breadcrumb(f"subform name='{subform_name}'") # Remove from breadcrumb
+            return newly_created_group_for_this_subform
         except Exception as e:
-            print(f"Error processing subform: {e}")
+            print(f"Error processing subform {subform_element.attrib.get('name', 'unknown')}: {e}")
+            self.remove_breadcrumb(f"subform name='{subform_element.attrib.get('name', 'unknown')}'") # Ensure breadcrumb is cleaned up on error
             return None
+
+    def _process_exclgroup_internal(self, exclgroup_element):
+        """Process an exclusion group and return the JSON object."""
+        group_name = exclgroup_element.attrib.get("name", f"exclgroup_{self.id_counter}")
+        
+        conditions = []
+        script_result = self.process_script(exclgroup_element)
+        if script_result:
+            if script_result["type"] == "visibility":
+                conditions.append(script_result)
+            elif script_result["type"] == "javascript": # Assuming general JS can also be a condition
+                conditions.append(script_result)
+
+        radio_obj = {
+            "type": "radio",
+            "id": self.next_id(),
+            "label": None,
+            "styles": None,
+            "codeContext": {"name": group_name},
+            "listItems": [],
+            "direction": "vertical",
+            "validation": [],
+            "value": False, # Default selected value
+            "conditions": conditions
+        }
+        
+        radio_group_label = self.extract_label(exclgroup_element)
+        if radio_group_label:
+            radio_obj["label"] = radio_group_label
+
+        for field_in_exclgroup in exclgroup_element.findall("./template:field", self.namespaces):
+            item_label_elem = field_in_exclgroup.find(".//template:caption//template:text", self.namespaces)
+            item_text = item_label_elem.text.strip() if item_label_elem is not None and item_label_elem.text else field_in_exclgroup.attrib.get("name", "Option")
+            
+            item_value = item_text 
+
+            items_val_elem = field_in_exclgroup.find("./template:items/template:text", self.namespaces) # For XDPs where item value might be different from display
+            if items_val_elem is not None and items_val_elem.text:
+                item_value = items_val_elem.text.strip()
+            # Check for <value><integer> or <value><text> for default selection state of an option
+            # This would typically set radio_obj["value"] to item_value if this option is selected by default.
+            # Simplified for now.
+
+            radio_obj["listItems"].append({
+                "text": item_text,
+                "value": item_value,
+                "name": field_in_exclgroup.attrib.get("name", item_text) 
+            })
+        
+        # Default selected value for the group (which item_value is selected)
+        # This often comes from <bindItems> or <value> on the exclGroup itself
+        value_elem = exclgroup_element.find("./template:value/template:text", self.namespaces) # Or integer, etc.
+        if value_elem is not None and value_elem.text:
+            radio_obj["value"] = value_elem.text.strip()
+
+
+        self.Report.report_success(group_name, 'radio', f"Radio Group: {radio_group_label if radio_group_label else group_name}")
+        return radio_obj
 
     def process_exclgroup(self, exclgroup):
         try:
             """Process an exclusion group (radio button group)"""
+            # Define group_name here to ensure it's available in the except block
             group_name = exclgroup.attrib.get("name", f"exclgroup_{self.id_counter}")
-                        
-            # Process any scripts and get conditions
-            conditions = []
-            script_result = self.process_script(exclgroup)
-            if script_result:
-                conditions.append(script_result)
-            
-            # Create base radio object
-            radio_obj = {
-                "type": "radio",
-                "id": self.next_id(),
-                "label": None,
-                "styles": None,
-                "codeContext": {
-                    "name": group_name
-                },
-                "listItems": [],
-                "direction": "vertical",
-                "validation": [],
-                "value": False
-            }
-            
-            
-            # Process fields to create list items
-            for field in exclgroup.findall("./template:field", self.namespaces):
-                caption = field.find(".//template:caption//template:text", self.namespaces)
-                text_value = caption.text if caption is not None and caption.text else field.attrib.get("name", "Option")
-                
-                radio_obj["listItems"].append({
-                    "text": text_value,
-                    "value": text_value,
-                    "name": text_value
-                })
-            
-            # Add conditions if any
-            if conditions:
-                radio_obj["conditions"] = conditions
-            
-            self.all_items.append(radio_obj)
-            self.Report.report_success(group_name, 'radio', "Radio Button Group")
-            
-            return None
+            radio_obj = self._process_exclgroup_internal(exclgroup)
+            if radio_obj:
+                self.all_items.append(radio_obj)
+            return None # Original behavior maintained for root-level calls
         except Exception as e:
             print(f"Error processing exclusion group: {e}")
-            self.Report.report_error(group_name if 'group_name' in locals() else "unknown_exclgroup", 
+            self.Report.report_error(group_name, # Now group_name is defined
                                     'radio', 
                                     "Error processing exclusion group")
             return None
