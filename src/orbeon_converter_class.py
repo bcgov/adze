@@ -264,77 +264,64 @@ class OrbeonParser:
                 section_obj["groupItems"][0]["fields"] = []
                 
                 # Process fields directly from the template instance
-                template_section = template_instance.find(f".//{section_name}-iteration", self.namespaces)
-                if template_section is not None:
+                template_section_data = template_instance.find(f".//{section_name}-iteration", self.namespaces)
+                if template_section_data is not None:
                     # Process all fields in the template section
-                    for field_elem in template_section:
-                        field_obj = self.process_field(field_elem)
-                        if field_obj:
-                            if isinstance(field_obj, list):
-                                section_obj["groupItems"][0]["fields"].extend(field_obj)
+                    for field_elem_in_template in template_section_data:
+                        processed_field_obj = self.process_field(field_elem_in_template)
+                        if processed_field_obj:
+                            if isinstance(processed_field_obj, list):
+                                section_obj["groupItems"][0]["fields"].extend(processed_field_obj)
                             else:
-                                section_obj["groupItems"][0]["fields"].append(field_obj)
-            # For non-repeater sections, process fields directly
+                                section_obj["groupItems"][0]["fields"].append(processed_field_obj)
+            # For non-repeater sections, process all children (direct fields, grids, nested sections) in a single pass.
             elif not is_repeater:
-                for grid in section:
-                    grid_name = grid.tag
+                for child_element in section:
+                    child_tag_name = child_element.tag
+
+                    if child_tag_name.startswith("section-"):
+                        # This is a nested section. Add breadcrumb and recurse.
+                        # The 'parent_section' for the nested section is the same as the current non-repeater's parent_section.
+                        self.add_breadcrumb(child_tag_name)
+                        self.process_section(child_element, parent_section)
+                        self.remove_breadcrumb(child_tag_name)
                     
-                    # Skip processing if this is not a grid element
-                    if not grid_name.startswith("grid-"):
-                        field_obj = self.process_field(grid)
-                        if field_obj:
-                            if isinstance(field_obj, list):
-                                if parent_section:
-                                    parent_section["groupItems"][0]["fields"].extend(field_obj)
-                                else:
-                                    self.all_items.extend(field_obj)
-                            else:
-                                if parent_section:
-                                    parent_section["groupItems"][0]["fields"].append(field_obj)
-                                else:
-                                    self.all_items.append(field_obj)
-                        continue
+                    elif child_tag_name.startswith("grid-"):
+                        # This is a grid. Add breadcrumb, process, and remove breadcrumb.
+                        self.add_breadcrumb(child_tag_name)
+                        grid_name = child_tag_name # For clarity in iteration_tag
+                        
+                        iteration_tag = f"{grid_name}-iteration"
+                        iterations = child_element.findall(f"./{iteration_tag}", self.namespaces) # child_element is the grid
+                        
+                        if iterations:
+                            # This is a repeating grid
+                            for iteration in iterations:
+                                # process_grid_iteration appends fields to parent_section's list or self.all_items
+                                self.process_grid_iteration(iteration, parent_section)
+                        else:
+                            # Regular grid with direct fields
+                            for field_elem_in_grid in child_element: # child_element is the grid
+                                field_obj_from_grid = self.process_field(field_elem_in_grid)
+                                if field_obj_from_grid:
+                                    if isinstance(field_obj_from_grid, list):
+                                        if parent_section: parent_section["groupItems"][0]["fields"].extend(field_obj_from_grid)
+                                        else: self.all_items.extend(field_obj_from_grid)
+                                    else:
+                                        if parent_section: parent_section["groupItems"][0]["fields"].append(field_obj_from_grid)
+                                        else: self.all_items.append(field_obj_from_grid)
+                        self.remove_breadcrumb(grid_name)
                     
-                    self.add_breadcrumb(grid_name)
-                    
-                    # Handle grid iterations differently (they can contain repeating fields)
-                    iteration_tag = f"{grid_name}-iteration"
-                    iterations = grid.findall(f"./{iteration_tag}", self.namespaces)
-                    
-                    if iterations:
-                        # This is a repeating grid
-                        for iteration in iterations:
-                            self.process_grid_iteration(iteration, parent_section)
                     else:
-                        # Regular grid with fields
-                        for field_elem in grid:
-                            field_obj = self.process_field(field_elem)
-                            if field_obj:
-                                if isinstance(field_obj, list):
-                                    if parent_section:
-                                        parent_section["groupItems"][0]["fields"].extend(field_obj)
-                                    else:
-                                        self.all_items.extend(field_obj)
-                                else:
-                                    if parent_section:
-                                        parent_section["groupItems"][0]["fields"].append(field_obj)
-                                    else:
-                                        self.all_items.append(field_obj)
-                    
-                    self.remove_breadcrumb(grid_name)
-            
-            # Check if there are nested sections (like section-child-information within section-a)
-            nested_sections = False
-            for item in section:
-                if item.tag.startswith("section-"):
-                    nested_sections = True
-                    break
-            
-            # If this section has nested sections, process them separately
-            if nested_sections:
-                for nested_section in section:
-                    if nested_section.tag.startswith("section-"):
-                        self.process_section(nested_section, section_obj if section_obj else parent_section)
+                        # This is a direct field. process_field handles its own breadcrumbs.
+                        direct_field_obj = self.process_field(child_element)
+                        if direct_field_obj:
+                            if isinstance(direct_field_obj, list):
+                                if parent_section: parent_section["groupItems"][0]["fields"].extend(direct_field_obj)
+                                else: self.all_items.extend(direct_field_obj)
+                            else:
+                                if parent_section: parent_section["groupItems"][0]["fields"].append(direct_field_obj)
+                                else: self.all_items.append(direct_field_obj)
             
             self.remove_breadcrumb(section_name)
         except Exception as e:
@@ -713,6 +700,11 @@ class OrbeonParser:
     def create_field_object(self, field_type, field_name, field_value, field_attributes, mapping):
         """Create field object based on field type"""
         try:
+            # If determine_field_type explicitly decided this element shouldn't be a field,
+            # then field_type will be None. In this case, don't create any field object.
+            if field_type is None:
+                return None
+
             logger.debug(f"Creating field object for {field_name} with type {field_type}")
             logger.debug(f"Field value: {field_value}, Attributes: {field_attributes}, Mapping: {mapping}")
             
@@ -772,12 +764,51 @@ class OrbeonParser:
                         "value": bind_attrs['maxLength'],
                         "errorMessage": bind_attrs.get('xxf:maxLength-message', f"Value must be at most {bind_attrs['maxLength']} characters")
                     })
+                
+                # Handle formula type validations
+                if 'constraint' in bind_attrs:
+                    validation_rules.append({
+                        "type": "formula",
+                        "value": bind_attrs['constraint'],
+                        "errorMessage": bind_attrs.get('xxf:constraint-message', "Invalid value")
+                    })
+                
+                # Handle type-specific validations
+                if 'type' in bind_attrs:
+                    if bind_attrs['type'] == 'xs:decimal' or bind_attrs['type'] == 'xs:integer':
+                        validation_rules.append({
+                            "type": "number",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid number")
+                        })
+                    elif bind_attrs['type'] == 'xs:date':
+                        validation_rules.append({
+                            "type": "date",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid date")
+                        })
+                    elif bind_attrs['type'] == 'xs:email':
+                        validation_rules.append({
+                            "type": "email",
+                            "value": True,
+                            "errorMessage": bind_attrs.get('xxf:type-message', "Must be a valid email address")
+                        })
             
             # Extract constraints from bind element
             bind_elem = self.root.find(f".//xf:bind[@id='{field_name}-bind']", self.namespaces)
             logger.debug(f"Found bind element for {field_name}: {bind_elem is not None}")
             
             if bind_elem is not None:
+                # Check if field is required from bind element
+                required_attr = bind_elem.get('required')
+                if required_attr in ['true()', 'true']:
+                    validation_rules.append({
+                        "type": "required",
+                        "value": True,
+                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                    })
+                
+                # Process constraint elements
                 constraints = bind_elem.findall(".//xf:constraint", self.namespaces)
                 logger.debug(f"Found {len(constraints)} constraints for {field_name}")
                 
@@ -801,20 +832,21 @@ class OrbeonParser:
                             "value": int(max_length),
                             "errorMessage": f"Value must be at most {max_length} characters"
                         })
-                    elif not any(x in constraint_value for x in ["xxf:min-length", "xxf:max-length"]):
+                    else:
                         # Add any other constraint as formula type
                         validation_rules.append({
                             "type": "formula", 
                             "value": constraint_value,
                             "errorMessage": constraint.get("xxf:validation-message", "Invalid value")
                         })
-
-                # Check if field is required
-                if bind_elem is not None and bind_elem.get('required') == 'true()':
+                
+                # Process direct constraint attribute
+                direct_constraint = bind_elem.get('constraint')
+                if direct_constraint:
                     validation_rules.append({
-                        "type": "required",
-                        "value": True,
-                        "errorMessage": bind_elem.get('xxf:required-message', "This field is required")
+                        "type": "formula",
+                        "value": direct_constraint,
+                        "errorMessage": bind_elem.get('xxf:constraint-message', "Invalid value")
                     })
             
             # Get label and hint from form resources
@@ -837,9 +869,11 @@ class OrbeonParser:
                 "styles": None,
                 "codeContext": {
                     "name": field_name
-                },
-                "validation": validation_rules if validation_rules else []
+                }
             }
+
+            if validation_rules:  # Add validation key only if validation_rules is not empty
+                base_field_obj["validation"] = validation_rules
             
             # Add type-specific properties
             if field_type == "text-info":
