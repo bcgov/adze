@@ -459,7 +459,7 @@ class XDPParser:
         except Exception as e:
             print(f"Error processing root elements: {e}")
     
-    def process_draw(self, draw):
+    def process_draw(self, draw, is_table_head=False):
         try:
             """Process a draw element (usually text display or image)"""
             draw_name = draw.attrib.get("name", f"field_{self.id_counter}")
@@ -536,7 +536,10 @@ class XDPParser:
             if mapping and mapping.get("fieldType"):
                 field_type = mapping.get("fieldType")
             elif is_text_edit:
-                field_type = "text-info"
+                if is_table_head:
+                    field_type = "text-input"
+                else:
+                    field_type = "text-info"
             elif "foi" in draw_name.lower():
                 field_type = "foi_statement"
             elif text_value:
@@ -955,12 +958,15 @@ class XDPParser:
                     "codeContext": {
                         "name": field_name
                     },
-                    "listItems": [],
                     "databindings": {},
                     "direction": "vertical",
                     "value": False,
                     "conditions": []
                 }
+                
+                # Only add listItems for radio buttons, not checkboxes
+                if is_radio:
+                    field_obj["listItems"] = []
 
                 if presence == "hidden":
                     field_obj["conditions"].append({
@@ -968,17 +974,18 @@ class XDPParser:
                         "value": "{ return false }"
                     })
 
-                # Extract items directly with their attributes using ElementTree's API
-                items_elements = field.findall("./template:items", self.namespaces)
-                for items_elem in items_elements:
-                    # Get integer elements within this items element
-                    for integer_elem in items_elem.findall("./template:integer", self.namespaces):
-                        if integer_elem.text:
-                            field_obj["listItems"].append({
-                                "text": str(integer_elem.text.strip()),
-                                "value": str(integer_elem.text.strip()),
-                                "name": str(integer_elem.text.strip())
-                            })
+                # Only extract items for radio buttons, not checkboxes
+                if is_radio:
+                    items_elements = field.findall("./template:items", self.namespaces)
+                    for items_elem in items_elements:
+                        # Get integer elements within this items element
+                        for integer_elem in items_elem.findall("./template:integer", self.namespaces):
+                            if integer_elem.text:
+                                field_obj["listItems"].append({
+                                    "text": str(integer_elem.text.strip()),
+                                    "value": str(integer_elem.text.strip()),
+                                    "name": str(integer_elem.text.strip())
+                                })
 
                 # Extract checkbox/radio default value (1 = checked, 0 = unchecked)
                 value_elem = field.find("./template:value/template:integer", self.namespaces)
@@ -1212,10 +1219,12 @@ class XDPParser:
         except Exception as e:
             print(f"Error processing global scripts: {e}")
 
-    def process_subform(self, subform_element, parent_group_items_fields=None):
+    def process_subform(self, subform_element, parent_group_items_fields=None, is_table_head=False):
         try:
             subform_name = subform_element.attrib.get("name", f"subform_{self.id_counter}")
             self.add_breadcrumb(f"subform name='{subform_name}'", subform_element) # Add to breadcrumb
+
+            is_current_subform_a_table_container = subform_element.attrib.get("layout") == "table"
 
             occur_elem = subform_element.find("./template:occur", self.namespaces)
             is_this_subform_a_repeater = occur_elem is not None
@@ -1271,17 +1280,31 @@ class XDPParser:
                             excl_group_obj["codeContext"]["name"] = f"{subform_name}_{original_cc_name}" if original_cc_name else subform_name
                         current_processing_target_list.append(excl_group_obj)
                 elif child_tag_type == 'draw':
-                    draw_obj = self.process_draw(child)
+                    draw_obj = self.process_draw(child,is_table_head)
                     if draw_obj:
                         if is_flat_target_for_prefixing and subform_name:
                             original_cc_name = draw_obj["codeContext"].get("name")
                             draw_obj["codeContext"]["name"] = f"{subform_name}_{original_cc_name}" if original_cc_name else subform_name
                         current_processing_target_list.append(draw_obj)
                 elif child_tag_type == 'subform':
+                    # If the PARENT subform (subform_element) is a table container,
+                    # check the role of THIS child subform ('child').
+                    if is_current_subform_a_table_container:
+                        assist_elem = child.find("./template:assist", self.namespaces)
+                        if assist_elem is not None:
+                            role = assist_elem.attrib.get("role")
+                            if role == "TR":
+                                # Skip processing this subform child if it's marked as a table row (TR)
+                                # and its parent (subform_element) is a table layout.
+                                # TH (table header) or other roles will be processed by falling through.
+                                continue # Go to the next child of subform_element
+                            elif role == "TH":
+                                is_table_head = True
+
                     if newly_created_group_for_this_subform:
-                        self.process_subform(child, parent_group_items_fields=current_processing_target_list)
+                        self.process_subform(child, parent_group_items_fields=current_processing_target_list, is_table_head=is_table_head)
                     else:
-                        self.process_subform(child, parent_group_items_fields=current_processing_target_list if parent_group_items_fields is not None else None)
+                        self.process_subform(child, parent_group_items_fields=current_processing_target_list if parent_group_items_fields is not None else None, is_table_head=is_table_head)
             
             self.remove_breadcrumb(f"subform name='{subform_name}'") # Remove from breadcrumb
             return newly_created_group_for_this_subform
