@@ -459,7 +459,6 @@ class XDPParser:
         except Exception as e:
             print(f"Error processing root elements: {e}")
     
-    def process_draw(self, draw):
     def process_draw(self, draw, is_table_head=False):
         try:
             """Process a draw element (usually text display or image)"""
