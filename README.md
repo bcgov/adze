@@ -1,6 +1,7 @@
 # XML to JSON Converter
 
 ## 📖 Overview
+
 The **XML to JSON Converter** is a command-line tool designed to convert XFA-based XML forms and Orbeon XML forms into JSON format. It supports **single file conversion** as well as **batch processing** of multiple XML files.
 
 ---
@@ -8,6 +9,7 @@ The **XML to JSON Converter** is a command-line tool designed to convert XFA-bas
 ## 🚀 Installation
 
 To install the required dependencies, run:
+
 ```sh
 pip3 install -r requirements.txt
 ```
@@ -17,6 +19,7 @@ pip3 install -r requirements.txt
 ## 🚀 Running the XML Converter
 
 ### **1️⃣ Main Menu**
+
 When you run the script, you will see a menu with different options:
 
 ```sh
@@ -55,6 +58,20 @@ python xdp_converter_cli.py
 
 ---
 
+### **4️⃣ Process Files with Klamm Import Format**
+
+- Select the option to process files with Klamm import format.
+- Choose the input directory containing the XML files.
+- The tool will convert all files in the directory to the Klamm import format and save them in the output directory.
+
+```sh
+? Select an action:  Single Klamm Format Extraction
+```
+
+```sh
+? Select an action:  Batch Klamm Format Extraction
+```
+
 ## 🚀 Running the Orbeon XML Converter
 
 The Orbeon converter is a separate tool specifically designed to convert Orbeon Forms XML to JSON:
@@ -66,6 +83,7 @@ python src/orbeon_converter_cli.py -i /path/to/input.xml [-m /path/to/mapping.js
 ```
 
 **Options:**
+
 - `-i, --input`: Path to input Orbeon XML file (required)
 - `-m, --mapping`: Path to XML field mapping file (defaults to xml_mapping.json in project root)
 - `-o, --output`: Path to output JSON file (defaults to auto-generated filename in the output directory)
@@ -98,6 +116,7 @@ REPORT_DIR = os.getenv("REPORT_DIR", "./data/report")
 ---
 
 ## 📄 Report Generation
+
 After conversion, a detailed report is generated for each file. The report includes:
 
 - ✅ **Successful conversions**
@@ -122,12 +141,13 @@ Both formats are converted to a standardized JSON structure that can be used by 
 ---
 
 ## 📄 Additional Documentation
+
 For a detailed explanation of reports and error handling, refer to the full documentation.
 
 ---
 
 ### 🔗 **Contributors & Support**
+
 If you encounter any issues, feel free to reach out or submit a pull request!
 
 Happy Coding! 🚀
-
