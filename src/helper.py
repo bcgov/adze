@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Helper script to directly load the HR0080R_fields.json and write a structured version.
+Helper script for klamm batch conversion
 """
 
 import os
@@ -140,7 +140,9 @@ class FormField:
                     result["listItems"].append(option)
                 else:
                     # String option, convert to proper format
-                    result["listItems"].append({"value": str(i), "label": str(option)})
+                    result["listItems"].append(
+                        {"value": str(option), "label": str(option)}
+                    )
 
         # Add help text if present
         if self.help_text:
@@ -253,63 +255,6 @@ def convert_to_structured_format(fields_data: Dict[str, Any]) -> Dict[str, Any]:
         return None
 
 
-def main():
-    """
-    Main function to process the HR0080R_fields.json file
-    """
-    input_path = Path("HR0080R_fields.json")
-    output_path = Path("HR0080R-form-template-v.2.0.json")
-
-    # Check if input file exists
-    if not input_path.exists():
-        logger.error(f"Input file not found: {input_path}")
-        return False
-
-    # Load the input file
-    with open(input_path, "r") as f:
-        input_data = json.load(f)
-
-    logger.info(
-        f"Loaded input file with {len(input_data.get('fields', []))} top-level fields"
-    )
-
-    # Process each field
-    fields = []
-    for field_dict in input_data.get("fields", []):
-        field = dict_to_form_field(field_dict)
-        if field:
-            fields.append(field)
-
-    # Debug the field structure
-    for field in fields:
-        logger.info(
-            f"Top-level field: {field.name} with {len(field.children)} direct children"
-        )
-
-    # Create the output structure
-    form_id = input_data.get("form_id", "unknown")
-    result = {
-        "form_id": form_id,
-        "title": f"Converted Form: {form_id}",
-        "data": {
-            "metadata": {
-                "name": form_id,
-                "status": "draft",
-                "version": "1.0.0",
-                "description": "Converted from old form template",
-            },
-            "elements": [field.to_structured_dict() for field in fields],
-        },
-    }
-
-    # Write to output file
-    with open(output_path, "w") as f:
-        json.dump(result, f, indent=2)
-
-    logger.info(f"Successfully wrote output file to {output_path}")
-    return True
-
-
 def find_matching_conversion_file(fields_file_path: str) -> Optional[str]:
     """Find the corresponding conversion output file for a fields file"""
     fields_path = Path(fields_file_path)
@@ -317,35 +262,203 @@ def find_matching_conversion_file(fields_file_path: str) -> Optional[str]:
         0
     ]  # Extract base form name
 
-    # Look in the working-files directory for conversion output
-    working_dir = fields_path.parent
+    # Look in the parent directory for working-files directory
+    working_dir = fields_path.parent  # This is the working-files directory
+    output_dir = working_dir.parent  # This is the output directory
+    temp_conversion_dir = output_dir / "working-files"  # Now we get the correct path
+
+    logger.info(f"Looking for working-files directory at: {temp_conversion_dir}")
+
+    if not temp_conversion_dir.exists():
+        logger.warning(f"working-files directory not found: {temp_conversion_dir}")
+        return None
+
+    logger.info(
+        f"Found working-files directory. Searching for files matching: {base_name}*.json"
+    )
 
     # Search for conversion files with similar names
-    for conversion_file in working_dir.glob(f"{base_name}*.json"):
-        if "conversion" in conversion_file.name or "output" in conversion_file.name:
+    conversion_files = list(temp_conversion_dir.glob(f"{base_name}*.json"))
+    logger.info(
+        f"Found {len(conversion_files)} potential conversion files: {[f.name for f in conversion_files]}"
+    )
+
+    for conversion_file in conversion_files:
+        if "conversion" in conversion_file.name:
+            logger.info(f"Found matching conversion file: {conversion_file}")
             return str(conversion_file)
+
+    logger.warning(f"No matching conversion file found for {base_name}")
+    return None
+
+
+def find_field_by_databinding(
+    elements: List[dict], databinding_path: str
+) -> Optional[dict]:
+    """Find a field in the elements list by its databinding path"""
+    for element in elements:
+        # Check if this element has the matching databinding
+        if element.get("dataBinding", {}).get("dataBindingPath") == databinding_path:
+            return element
+
+        # Recursively search in child elements
+        if "elements" in element:
+            found = find_field_by_databinding(element["elements"], databinding_path)
+            if found:
+                return found
 
     return None
 
 
-def merge_field_data(structured_field: dict, conversion_data: dict) -> dict:
-    """Merge data from conversion output into structured field"""
-    # Add dataSources if available
-    if "dataSources" in conversion_data:
-        structured_field["dataSources"] = conversion_data["dataSources"]
+def find_field_by_name_or_id(
+    elements: List[dict], name: str, field_id: str = None
+) -> Optional[dict]:
+    """Find a field in the elements list by name or id"""
+    for element in elements:
+        # Check if this element matches by name or id
+        if element.get("name") == name or element.get("id") == field_id:
+            return element
 
-    # Add global JavaScript (always add, even if empty)
-    if "javascript" in conversion_data:
-        structured_field["javascript"] = conversion_data["javascript"]
-    else:
-        # If no javascript in conversion, add empty object
-        structured_field["javascript"] = {}
+        # Recursively search in child elements
+        if "elements" in element:
+            found = find_field_by_name_or_id(element["elements"], name, field_id)
+            if found:
+                return found
 
-    # Add codeContext
-    if "codeContext" not in structured_field:
+    return None
+
+
+def merge_conversion_field_data(structured_field: dict, conversion_field: dict) -> dict:
+    """Merge data from a single conversion field into a structured field"""
+
+    # Update label if conversion has a better one and structured field doesn't have one
+    if conversion_field.get("label") and conversion_field["label"] != "null":
+        if not structured_field.get("label") or structured_field["label"] == "":
+            structured_field["label"] = conversion_field["label"]
+
+    # Add or update codeContext
+    if "codeContext" in conversion_field:
+        structured_field["codeContext"] = conversion_field["codeContext"]
+    elif "codeContext" not in structured_field:
         structured_field["codeContext"] = {"name": None}
 
+    # Add databindings information - update existing dataBinding if it matches
+    if "databindings" in conversion_field:
+        databinding = conversion_field["databindings"]
+        if "path" in databinding:
+            # If the structured field already has a matching dataBinding path, preserve it
+            existing_path = structured_field.get("dataBinding", {}).get(
+                "dataBindingPath"
+            )
+            if not existing_path or existing_path == databinding["path"]:
+                structured_field["dataBinding"] = {
+                    "dataBindingPath": databinding["path"],
+                    "dataBindingType": "jsonpath",
+                }
+                # Also add source if available
+                if "source" in databinding:
+                    structured_field["dataBinding"]["source"] = databinding["source"]
+
+    # Add styles if present
+    if "styles" in conversion_field and conversion_field["styles"]:
+        structured_field["styles"] = conversion_field["styles"]
+
+    # Add mask/format information
+    if "mask" in conversion_field and conversion_field["mask"]:
+        structured_field["mask"] = conversion_field["mask"]
+        # For date fields, also set the format
+        if structured_field.get("elementType") == "DateSelectInputFormElements":
+            structured_field["dateFormat"] = conversion_field["mask"]
+
+    # Add placeholder
+    if "placeholder" in conversion_field and conversion_field["placeholder"]:
+        structured_field["placeholder"] = conversion_field["placeholder"]
+
+    # Add input type information
+    if "inputType" in conversion_field:
+        structured_field["inputType"] = conversion_field["inputType"]
+
+    # Add conditions/validation
+    if "conditions" in conversion_field:
+        structured_field["conditions"] = conversion_field["conditions"]
+
+    if "validation" in conversion_field:
+        structured_field["validation"] = conversion_field["validation"]
+
+    # Add calculated values
+    if "calculatedValue" in conversion_field:
+        structured_field["calculatedValue"] = conversion_field["calculatedValue"]
+
+    # Add list items for dropdowns/selects
+    if "listItems" in conversion_field:
+        structured_field["listItems"] = conversion_field["listItems"]
+
+    # Add button-specific properties
+    if "buttonType" in conversion_field:
+        structured_field["buttonType"] = conversion_field["buttonType"]
+
+    # Add checkbox/radio specific properties
+    if (
+        "value" in conversion_field
+        and structured_field.get("elementType") == "CheckboxInputFormElements"
+    ):
+        structured_field["defaultValue"] = conversion_field["value"]
+
+    # Add repeater information for groups
+    if "repeater" in conversion_field:
+        structured_field["repeats"] = conversion_field["repeater"]
+        if "groupItems" in conversion_field:
+            structured_field["groupItems"] = conversion_field["groupItems"]
+
     return structured_field
+
+
+def integrate_fields_recursive(
+    structured_elements: List[dict], conversion_items: List[dict]
+) -> None:
+    """Recursively integrate conversion data into structured elements"""
+
+    logger.info(
+        f"integrate_fields_recursive: Processing {len(structured_elements)} elements with {len(conversion_items)} conversion items"
+    )
+
+    # Create a mapping of conversion items by databinding path (most reliable identifier)
+    conversion_map = {}
+    for item in conversion_items:
+        # Map by databinding path (most reliable)
+        if "databindings" in item and "path" in item["databindings"]:
+            conversion_map[item["databindings"]["path"]] = item
+            logger.debug(
+                f"Mapped conversion item by path: {item['databindings']['path']}"
+            )
+
+    logger.info(
+        f"Created conversion map with {len(conversion_map)} entries by databinding path"
+    )
+
+    # Update each structured element
+    matches_found = 0
+    for element in structured_elements:
+        # Try to find matching conversion data by databinding path
+        conversion_data = None
+
+        if element.get("dataBinding", {}).get("dataBindingPath"):
+            path = element["dataBinding"]["dataBindingPath"]
+            conversion_data = conversion_map.get(path)
+            if conversion_data:
+                logger.debug(f"Found match for path: {path}")
+                # Merge the data directly into the element (modify in place)
+                merge_conversion_field_data(element, conversion_data)
+                matches_found += 1
+                logger.debug(
+                    f"Merged conversion data for field: {element.get('name', 'unnamed')}"
+                )
+
+        # Recursively process child elements
+        if "elements" in element and element["elements"]:
+            integrate_fields_recursive(element["elements"], conversion_items)
+
+    logger.info(f"Found {matches_found} matches in this level")
 
 
 def integrate_conversion_data(
@@ -353,6 +466,10 @@ def integrate_conversion_data(
 ) -> Dict[str, Any]:
     """Integrate data from both extraction methods"""
     try:
+        logger.info(
+            f"Starting integration of {fields_file_path} with {conversion_file_path}"
+        )
+
         # Load both files
         with open(fields_file_path, "r", encoding="utf-8") as f:
             fields_data = json.load(f)
@@ -360,20 +477,79 @@ def integrate_conversion_data(
         with open(conversion_file_path, "r", encoding="utf-8") as f:
             conversion_data = json.load(f)
 
+        logger.info(
+            f"Loaded {len(fields_data.get('fields', []))} fields from extraction"
+        )
+        logger.info(
+            f"Loaded {len(conversion_data.get('data', {}).get('items', []))} items from conversion"
+        )
+
         # Convert fields data to structured format
+        logger.info("Converting fields data to structured format...")
         structured_result = convert_to_structured_format(fields_data)
+
+        if not structured_result:
+            logger.error("Failed to convert fields data to structured format")
+            return None
+
+        logger.info("Successfully converted to structured format")
 
         # Merge conversion data
         if "data" in structured_result:
+            logger.info("Merging conversion data...")
             structured_result["data"] = merge_field_data(
                 structured_result["data"], conversion_data
             )
+            logger.info("Successfully merged conversion data")
 
+        logger.info("Integration completed successfully")
         return structured_result
 
     except Exception as e:
         logger.error(f"Error integrating conversion data: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         return None
+
+
+def merge_field_data(structured_data: dict, conversion_data: dict) -> dict:
+    """Merge data from conversion output into structured field data"""
+    logger.info("Starting merge_field_data")
+
+    # Add dataSources if available
+    if "dataSources" in conversion_data:
+        structured_data["dataSources"] = conversion_data["dataSources"]
+        logger.info("Added dataSources")
+
+    # Add global JavaScript (always add, even if empty)
+    if "javascript" in conversion_data:
+        structured_data["javascript"] = conversion_data["javascript"]
+        logger.info("Added JavaScript from conversion")
+    else:
+        # If no javascript in conversion, add empty object
+        structured_data["javascript"] = {}
+        logger.info("Added empty JavaScript object")
+
+    # Integrate field-level data from conversion items
+    if "data" in conversion_data and "items" in conversion_data["data"]:
+        conversion_items = conversion_data["data"]["items"]
+        logger.info(f"Found {len(conversion_items)} conversion items to integrate")
+
+        # Recursively integrate the conversion data into structured elements
+        if "elements" in structured_data:
+            logger.info(
+                f"Integrating into {len(structured_data['elements'])} structured elements"
+            )
+            integrate_fields_recursive(structured_data["elements"], conversion_items)
+            logger.info("Completed recursive field integration")
+        else:
+            logger.warning("No elements found in structured data")
+    else:
+        logger.warning("No conversion items found to integrate")
+
+    logger.info("Completed merge_field_data")
+    return structured_data
 
 
 def create_integrated_template(fields_file_path: str) -> bool:

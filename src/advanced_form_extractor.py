@@ -144,34 +144,105 @@ class XDPFormExtractor:
                         self.namespaces[prefix] = uri
 
     def extract_label(self, field_elem):
-        """Extract label from a field element"""
-        # Look for caption in various places
-        caption_elem = field_elem.find(
-            ".//template:caption/template:value/template:text", self.namespaces
-        )
-        if caption_elem is not None and caption_elem.text:
-            return caption_elem.text.strip()
+        """Extract label from field using multiple methods - enhanced version from XML converter"""
+        try:
+            label = None
 
-        # Look for speak element
-        speak_elem = field_elem.find(".//template:speak", self.namespaces)
-        if speak_elem is not None and speak_elem.text:
-            return speak_elem.text.strip()
+            # Method 0: Check for rich HTML caption (exData inside caption/value)
+            caption_elem = field_elem.find(".//template:caption", self.namespaces)
+            if caption_elem is not None:
+                for val in caption_elem.findall(".//template:value", self.namespaces):
+                    exdata = val.find(".//template:exData", self.namespaces)
+                    if exdata is not None:
+                        # Even if exdata.text is None, extract the inner XML
+                        html_content = ET.tostring(
+                            exdata, encoding="unicode", method="xml"
+                        )
+                        soup = BeautifulSoup(html_content, "html.parser")
 
-        # Look for assist element
-        assist_elem = field_elem.find(
-            ".//template:assist/template:speak", self.namespaces
-        )
-        if assist_elem is not None and assist_elem.text:
-            return assist_elem.text.strip()
+                        for tag_name in ["p", "div", "span"]:
+                            tag_elem = soup.find(tag_name)
+                            if tag_elem and tag_elem.get_text(strip=True):
+                                label = tag_elem.get_text(strip=True)
+                                break
 
-        # Look for toolTip
-        tooltip_elem = field_elem.find(
-            ".//template:assist/template:toolTip", self.namespaces
-        )
-        if tooltip_elem is not None and tooltip_elem.text:
-            return tooltip_elem.text.strip()
+                        if not label:
+                            label = soup.get_text(strip=True)
+                        if (
+                            label and label.strip()
+                        ):  # Only break if we have actual content
+                            break
 
-        return ""
+            # Method 1: Direct caption text
+            if not label or not label.strip():
+                caption_elem = field_elem.find(
+                    ".//template:caption//template:text", self.namespaces
+                )
+                if (
+                    caption_elem is not None
+                    and caption_elem.text
+                    and caption_elem.text.strip()
+                ):
+                    label = caption_elem.text.strip()
+
+            # Method 2: Value text that looks like a label
+            if not label or not label.strip():
+                value_elem = field_elem.find(
+                    ".//template:value//template:text", self.namespaces
+                )
+                if (
+                    value_elem is not None
+                    and value_elem.text
+                    and value_elem.text.strip()
+                ):
+                    text = value_elem.text.strip()
+                    # Check if this looks like a label (ends with :, all caps, etc)
+                    if text.endswith(":") or text.isupper() or len(text.split()) <= 4:
+                        label = text
+
+            # Method 3: Field name converted to label - ENHANCED
+            if not label or not label.strip():
+                field_name = field_elem.get("name", "")
+                if field_name:
+                    # Convert camelCase/snake_case to space-separated words
+                    import re
+
+                    # Handle camelCase like "childSex" -> "child Sex"
+                    # First insert space before uppercase letters that follow lowercase letters
+                    label = re.sub(r"([a-z])([A-Z])", r"\1 \2", field_name)
+
+                    # Handle sequences of uppercase letters followed by lowercase
+                    label = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", label)
+
+                    # Replace underscores and hyphens with spaces
+                    label = re.sub(r"[-_]+", " ", label)
+
+                    # Clean up multiple spaces and capitalize each word
+                    label = " ".join(
+                        word.capitalize() for word in label.split() if word
+                    )
+
+                    # Log the conversion for debugging
+                    logger.debug(
+                        f"Converted field name '{field_name}' to label '{label}'"
+                    )
+
+            # Fallback: Use field name as-is if nothing else worked
+            if not label or not label.strip():
+                field_name = field_elem.get("name", "")
+                if field_name:
+                    label = field_name.replace("_", " ").replace("-", " ").title()
+                    logger.debug(f"Using field name as fallback label: '{label}'")
+
+            return label if label and label.strip() else None
+
+        except Exception as e:
+            logger.warning(f"Error extracting label: {e}")
+            field_name = field_elem.get("name", "")
+            if field_name:
+                # Emergency fallback
+                return field_name.replace("_", " ").replace("-", " ").title()
+            return None
 
     def get_field_type(self, ui_elem):
         """Determine field type from UI element"""
@@ -203,15 +274,18 @@ class XDPFormExtractor:
         return "text-input", None
 
     def extract_options(self, field_elem):
-        """Extract options for choice fields"""
+        """Extract options for choice fields, ignoring items with presence='hidden'"""
         options = []
-
-        # Look for items in choiceList
-        items = field_elem.findall(".//template:items/template:*", self.namespaces)
-        for item in items:
-            if item.text:
-                options.append(item.text.strip())
-
+        # Find all <items> elements under the field
+        items_elements = field_elem.findall(".//template:items", self.namespaces)
+        for items_elem in items_elements:
+            # Skip <items> with presence="hidden"
+            if items_elem.get("presence", "").lower() == "hidden":
+                continue
+            # For each <text> child, add its text as an option
+            for item in items_elem.findall("template:text", self.namespaces):
+                if item.text:
+                    options.append(item.text.strip())
         return options
 
     def extract_binding(self, field_elem):
