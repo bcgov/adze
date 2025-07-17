@@ -579,12 +579,10 @@ def create_integrated_template(fields_file_path: str) -> bool:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Save to templates directory
-        templates_dir = fields_path.parent.parent / "templates"
+        templates_dir = fields_path.parent.parent / "final_templates"
         templates_dir.mkdir(exist_ok=True)
 
-        output_file = (
-            templates_dir / f"{base_name}-integrated-template-v.2.0_{timestamp}.json"
-        )
+        output_file = templates_dir / f"{base_name}.json"
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(integrated_result, f, indent=2)
